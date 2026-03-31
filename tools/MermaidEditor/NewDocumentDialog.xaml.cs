@@ -236,6 +236,16 @@ public partial class NewDocumentDialog : Window
                     "Quadrant" => "quadrant",
                     "Requirement" => "requirement",
                     "C4" => "c4",
+                    "Sankey" => "sankey",
+                    "XY Chart" => "xychart",
+                    "Block" => "block",
+                    "Packet" => "packet",
+                    "Kanban" => "kanban",
+                    "Architecture" => "architecture",
+                    "ZenUML" => "zenuml",
+                    "Radar" => "radar",
+                    "Treemap" => "treemap",
+                    "Venn" => "venn",
                     _ => "blank"
                 };
                 try
@@ -338,6 +348,85 @@ public partial class NewDocumentDialog : Window
     Person(user, ""User"", ""A user of the system"")
     System(system, ""My System"", ""Main application"")
     Rel(user, system, ""Uses"")",
+            "Sankey" => @"sankey-beta
+
+Agricultural 'waste',Bio-conversion,124.729
+Bio-conversion,Liquid,0.597
+Bio-conversion,Losses,26.862
+Bio-conversion,Solid,280.322
+Bio-conversion,Gas,81.144",
+            "XY Chart" => @"xychart-beta
+    title ""Sales Revenue""
+    x-axis [jan, feb, mar, apr, may, jun]
+    y-axis ""Revenue (in $)"" 4000 --> 11000
+    bar [5000, 6000, 7500, 8200, 9500, 10500]
+    line [5000, 6000, 7500, 8200, 9500, 10500]",
+            "Block" => @"block-beta
+    columns 3
+    a[""Frontend""] b[""Backend""] c[""Database""]
+    space
+    d[""API Gateway""]:3",
+            "Packet" => @"packet-beta
+    0-15: ""Source Port""
+    16-31: ""Destination Port""
+    32-63: ""Sequence Number""
+    64-95: ""Acknowledgment Number""
+    96-99: ""Data Offset""
+    100-105: ""Reserved""
+    106-111: ""Flags""
+    112-127: ""Window Size""
+    128-143: ""Checksum""
+    144-159: ""Urgent Pointer""",
+            "Kanban" => @"kanban
+    column1[""To Do""]
+        task1[""Design UI""]
+        task2[""Write tests""]
+    column2[""In Progress""]
+        task3[""Implement API""]
+    column3[""Done""]
+        task4[""Setup CI/CD""]",
+            "Architecture" => @"architecture-beta
+    group api(cloud)[""API Layer""]
+
+    service db(database)[""Database""] in api
+    service server(server)[""Server""] in api
+    service disk(disk)[""Storage""] in api
+
+    db:R -- L:server
+    server:R -- L:disk",
+            "ZenUML" => @"zenuml
+    title Order Service
+    @Actor Client
+    @Boundary OrderController
+    @Entity OrderService
+
+    Client->OrderController.placeOrder() {
+        OrderController->OrderService.create() {
+            return id
+        }
+    }",
+            "Radar" => @"radar-beta
+    title Skills Assessment
+    axis1[""JavaScript""]
+    axis2[""CSS""]
+    axis3[""HTML""]
+    axis4[""React""]
+    axis5[""Node.js""]
+    curve1[""Current""] { 80, 60, 90, 70, 50 }
+    curve2[""Target""] { 90, 80, 95, 85, 75 }",
+            "Treemap" => @"treemap-beta
+    root[""Project""]
+        [""Frontend""]
+            [""React""]
+            [""CSS""]
+        [""Backend""]
+            [""API""]
+            [""Database""]",
+            "Venn" => @"venn-beta
+    title Team Skills
+    set1[""Frontend""] { A, B, C }
+    set2[""Backend""] { C, D, E }
+    set3[""DevOps""] { E, F, G }",
             _ => @"flowchart TD
     A[Start] --> B[End]"
         };
@@ -1174,6 +1263,253 @@ C4Context
     %% Rel(from, to, label) - Relationship
     %% Rel(from, to, label, technology) - Relationship with tech
     %% BiRel(from, to, label) - Bidirectional relationship");
+    }
+
+    private void Sankey_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"sankey-beta
+
+%% Sankey Diagram - Energy Flow
+%% Format: Source,Target,Value
+
+Agricultural 'waste',Bio-conversion,124.729
+Bio-conversion,Liquid,0.597
+Bio-conversion,Losses,26.862
+Bio-conversion,Solid,280.322
+Bio-conversion,Gas,81.144
+Liquid,Losses,1.401
+Liquid,Thermal generation,10.064
+Solid,Losses,4.394
+Solid,Thermal generation,21.735
+Gas,Losses,2.812
+Gas,Thermal generation,78.332
+Thermal generation,Electricity grid,52.803
+Thermal generation,District heating,46.184
+
+%% Sankey diagrams show flow/energy distribution
+%% Each line: Source,Target,Value
+%% Values determine the width of the flow");
+    }
+
+    private void XYChart_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"xychart-beta
+    title ""Monthly Sales Performance""
+    x-axis [Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec]
+    y-axis ""Revenue (in $)"" 4000 --> 15000
+    bar [5000, 6000, 7500, 8200, 9500, 10500, 9800, 11000, 12500, 13000, 14000, 14500]
+    line [5000, 6000, 7500, 8200, 9500, 10500, 9800, 11000, 12500, 13000, 14000, 14500]
+
+    %% XY Chart Elements:
+    %% title ""Chart Title"" - Chart title
+    %% x-axis [label1, label2, ...] - X axis categories
+    %% x-axis ""Label"" min --> max - X axis range
+    %% y-axis ""Label"" min --> max - Y axis range
+    %% bar [val1, val2, ...] - Bar series
+    %% line [val1, val2, ...] - Line series");
+    }
+
+    private void BlockDiagram_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"block-beta
+    columns 3
+
+    doc(""Document""):3
+    space down1<["" ""]>(down) space
+
+    block:3
+        columns 3
+        a[""Frontend""] b[""API Gateway""] c[""Auth Service""]
+    end
+
+    space down2<["" ""]>(down) space
+
+    block:3
+        columns 2
+        d[""Database""] e[""Cache""]
+    end
+
+    %% Block Diagram Elements:
+    %% columns N - Set number of columns
+    %% id[""Label""] - Block with label
+    %% id[""Label""]:N - Block spanning N columns
+    %% block:N ... end - Nested block group
+    %% space - Empty space
+    %% id<[""Label""]>(shape) - Shaped block");
+    }
+
+    private void Packet_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"packet-beta
+    title TCP Packet Structure
+
+    0-15: ""Source Port""
+    16-31: ""Destination Port""
+    32-63: ""Sequence Number""
+    64-95: ""Acknowledgment Number""
+    96-99: ""Data Offset""
+    100-105: ""Reserved""
+    106-111: ""Flags""
+    112-127: ""Window Size""
+    128-143: ""Checksum""
+    144-159: ""Urgent Pointer""
+    160-191: ""Options (if Data Offset > 5)""
+    192-255: ""Data (variable length)""
+
+    %% Packet Diagram Elements:
+    %% title - Packet title
+    %% start-end: ""Label"" - Bit range with label
+    %% Bit ranges define the structure of network packets");
+    }
+
+    private void Kanban_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"kanban
+    column1[""To Do""]
+        task1[""Research competitors""]
+        task2[""Define requirements""]
+        task3[""Create wireframes""]
+    column2[""In Progress""]
+        task4[""Design UI mockups""]
+        task5[""Implement backend API""]
+    column3[""Review""]
+        task6[""Code review: auth module""]
+    column4[""Done""]
+        task7[""Setup CI/CD pipeline""]
+        task8[""Configure database""]
+
+    %% Kanban Board Elements:
+    %% column[""Title""] - Define a column
+    %%     task[""Description""] - Task within column
+    %% Tasks are listed under their parent column");
+    }
+
+    private void Architecture_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"architecture-beta
+    group api(cloud)[""Cloud Infrastructure""]
+    group backend(server)[""Backend Services""] in api
+    group storage(database)[""Data Layer""] in api
+
+    service gateway(internet)[""API Gateway""] in api
+    service web(server)[""Web Server""] in backend
+    service auth(server)[""Auth Service""] in backend
+    service db(database)[""PostgreSQL""] in storage
+    service cache(database)[""Redis Cache""] in storage
+    service files(disk)[""File Storage""] in storage
+
+    gateway:R -- L:web
+    gateway:R -- L:auth
+    web:B -- T:db
+    web:B -- T:cache
+    auth:B -- T:db
+    web:R -- L:files
+
+    %% Architecture Elements:
+    %% group alias(icon)[""Label""] - Group/boundary
+    %% service alias(icon)[""Label""] in group - Service node
+    %% Icons: cloud, database, disk, internet, server
+    %% from:R -- L:to - Connection (T/B/L/R = Top/Bottom/Left/Right)");
+    }
+
+    private void ZenUML_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"zenuml
+    title Order Processing Workflow
+
+    @Actor Customer
+    @Boundary WebApp
+    @Control OrderService
+    @Entity Database
+    @Entity PaymentGateway
+
+    // Customer places order
+    Customer->WebApp.placeOrder(items) {
+        WebApp->OrderService.createOrder(items) {
+            OrderService->Database.saveOrder(order) {
+                return orderId
+            }
+            OrderService->PaymentGateway.processPayment(amount) {
+                return paymentConfirmation
+            }
+            return orderConfirmation
+        }
+        return ""Order placed successfully""
+    }
+
+    %% ZenUML Elements:
+    %% @Actor Name - Actor participant
+    %% @Boundary Name - Boundary participant
+    %% @Control Name - Control participant
+    %% @Entity Name - Entity participant
+    %% A->B.method() { } - Sync call with nested interactions
+    %% A->B.method() - Simple sync call
+    %% return value - Return from call");
+    }
+
+    private void Radar_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"radar-beta
+    title Technology Assessment
+    axis1[""Performance""]
+    axis2[""Scalability""]
+    axis3[""Security""]
+    axis4[""Usability""]
+    axis5[""Cost""]
+    axis6[""Maintainability""]
+    curve1[""Solution A""] { 80, 90, 70, 85, 60, 75 }
+    curve2[""Solution B""] { 65, 75, 90, 70, 80, 85 }
+    curve3[""Solution C""] { 90, 60, 80, 65, 70, 80 }
+
+    %% Radar Chart Elements:
+    %% title - Chart title
+    %% axis[""Label""] - Define an axis (min 3)
+    %% curve[""Name""] { val1, val2, ... } - Data series (0-100)
+    %% Values correspond to axes in order");
+    }
+
+    private void Treemap_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"treemap-beta
+    root[""Company Budget""]
+        [""Engineering""]
+            [""Frontend Team""]
+            [""Backend Team""]
+            [""DevOps""]
+            [""QA""]
+        [""Marketing""]
+            [""Digital""]
+            [""Content""]
+            [""Events""]
+        [""Sales""]
+            [""Enterprise""]
+            [""SMB""]
+        [""Operations""]
+            [""HR""]
+            [""Finance""]
+            [""Legal""]
+
+    %% Treemap Elements:
+    %% root[""Label""] - Root node (required)
+    %%     [""Label""] - Child node (indent for nesting)
+    %% Nesting depth determines hierarchy
+    %% Leaf sizes are proportional within their parent");
+    }
+
+    private void Venn_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"venn-beta
+    title Development Team Skills
+
+    set1[""Frontend""] { HTML, CSS, JavaScript, React, Vue }
+    set2[""Backend""] { JavaScript, Python, Java, SQL, REST }
+    set3[""DevOps""] { Docker, K8s, CI_CD, AWS, Python }
+
+    %% Venn Diagram Elements:
+    %% title - Diagram title
+    %% set[""Label""] { item1, item2, ... } - Define a set
+    %% Shared items between sets create overlapping regions
+    %% Supports 2-3 sets with automatic overlap calculation");
     }
 
     private void OpenExistingFile_Click(object sender, RoutedEventArgs e)

@@ -666,7 +666,8 @@ Console.WriteLine(""Hello, World!"");
             await PreviewWebView.EnsureCoreWebView2Async();
             _webViewInitialized = true;
             
-            // Set up navigation completed handler to update back button state
+            // Set up navigation handlers to update back button state and intercept anchor links
+            PreviewWebView.CoreWebView2.NavigationStarting += CoreWebView2_NavigationStarting;
             PreviewWebView.CoreWebView2.NavigationCompleted += CoreWebView2_NavigationCompleted;
             
             RenderPreview();
@@ -924,6 +925,51 @@ Console.WriteLine(""Hello, World!"");
     }
 
     #endregion
+
+    private async void CoreWebView2_NavigationStarting(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationStartingEventArgs e)
+    {
+        // Intercept anchor-only navigations (e.g. #1-executive-summary) and handle them
+        // with JavaScript scrollIntoView instead of letting WebView2 navigate away
+        if (e.Uri != null && _currentRenderMode == RenderMode.Markdown)
+        {
+            var uri = e.Uri;
+            // Check if this is an anchor link (hash-only navigation)
+            // WebView2 turns "#anchor" into "https://localfiles.mermaideditor/#anchor"
+            var hashIndex = uri.IndexOf('#');
+            if (hashIndex >= 0 && !_isRenderingContent)
+            {
+                var anchor = uri.Substring(hashIndex + 1);
+                if (!string.IsNullOrEmpty(anchor))
+                {
+                    // Cancel the navigation — we'll scroll via JS instead
+                    e.Cancel = true;
+                    
+                    // Scroll the preview to the target heading
+                    var escapedAnchor = anchor.Replace("\\", "\\\\")
+                                              .Replace("'", "\\'")
+                                              .Replace("\"", "\\\"");
+                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync(
+                        $"(function() {{ " +
+                        $"  var el = document.getElementById('{escapedAnchor}'); " +
+                        $"  if (el) {{ el.scrollIntoView({{ behavior: 'smooth', block: 'start' }}); }} " +
+                        $"  else {{ " +
+                        $"    var headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6'); " +
+                        $"    for (var h of headings) {{ " +
+                        $"      var id = h.textContent.trim().toLowerCase().replace(/[^\\w\\s-]/g, '').replace(/\\s+/g, '-'); " +
+                        $"      if (id === '{escapedAnchor}') {{ h.scrollIntoView({{ behavior: 'smooth', block: 'start' }}); break; }} " +
+                        $"    }} " +
+                        $"  }} " +
+                        $"}})()");
+                    
+                    // Also scroll the code editor to the same heading
+                    // Decode the anchor back to heading text for matching
+                    var headingText = Uri.UnescapeDataString(anchor)
+                        .Replace("-", " ");
+                    FindAndHighlightInEditor(null, headingText);
+                }
+            }
+        }
+    }
 
     private void CoreWebView2_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
     {
