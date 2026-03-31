@@ -272,16 +272,52 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     
-                    <TextBlock Grid.Row="0" Text="New (Select a template)" Foreground="{DynamicResource ThemeForegroundBrush}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                    <TextBlock Grid.Row="0" Text="New (Select a template)" Foreground="{DynamicResource ThemeForegroundBrush}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
                     
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <!-- Search filter -->
+                    <Grid Grid.Row="1" Margin="0,0,0,8">
+                        <TextBox x:Name="TemplateSearchBox" 
+                                 Padding="8,6,28,6"
+                                 Background="{DynamicResource ThemeToolbarBackgroundBrush}"
+                                 Foreground="{DynamicResource ThemeForegroundBrush}"
+                                 BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                 CaretBrush="{DynamicResource ThemeForegroundBrush}"
+                                 TextChanged="TemplateSearch_TextChanged">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="TextBox">
+                                                <Border Background="{TemplateBinding Background}" 
+                                                        BorderBrush="{TemplateBinding BorderBrush}" 
+                                                        BorderThickness="1" CornerRadius="4">
+                                                    <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        <TextBlock x:Name="SearchPlaceholder" Text="Search templates..." 
+                                   Foreground="{DynamicResource ThemeDisabledForegroundBrush}"
+                                   VerticalAlignment="Center" Margin="10,0,0,0"
+                                   IsHitTestVisible="False" FontStyle="Italic"/>
+                        <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                   Foreground="{DynamicResource ThemeDisabledForegroundBrush}"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"
+                                   IsHitTestVisible="False"/>
+                    </Grid>
+                    
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <TextBlock Text="Blank" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,0,0,4"/>
+                            <TextBlock x:Name="BlankSectionHeader" Text="Blank" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,0,0,4"/>
                             <!-- Split-button: Blank Mermaid Diagram with diagram type dropdown overlay -->
-                            <Grid>
+                            <Grid x:Name="BlankMermaidGrid">
                                 <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMermaid_Click">
                                     <StackPanel Orientation="Horizontal">
                                         <Image x:Name="BlankDiagramTypeIcon" Source="Resources/TemplateThumbnails/flowchart.png" Width="36" Height="36" Margin="0,0,10,0"/>
@@ -462,7 +498,7 @@
                                     </Border>
                                 </Popup>
                             </Grid>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMarkdown_Click">
+                            <Button x:Name="BlankMarkdownButton" Style="{StaticResource TemplateButtonStyle}" Click="BlankMarkdown_Click">
                                 <StackPanel Orientation="Horizontal">
                                     <Image Source="Resources/TemplateThumbnails/markdown.png" Width="36" Height="36" Margin="0,0,10,0"/>
                                     <StackPanel VerticalAlignment="Center">
@@ -472,289 +508,8 @@
                                 </StackPanel>
                             </Button>
                 
-                            <TextBlock Text="Markdown" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="MarkdownCheatSheet_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/markdown.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Markdown Cheat Sheet" FontWeight="SemiBold"/>
-                                        <TextBlock Text="All markdown syntax with live preview examples" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Flowcharts" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Flowchart_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/flowchart.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Flowchart" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Basic flowchart with nodes and connections" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="FlowchartAdvanced_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/flowchart.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Flowchart (Advanced)" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Flowchart with subgraphs and styling" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Sequence Diagrams" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Sequence_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/sequence.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Sequence Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Interactions between participants" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Class Diagrams" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="ClassDiagram_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/class.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Class Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="UML class diagram with relationships" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="State Diagrams" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="StateDiagram_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/state.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="State Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="State machine with transitions" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Entity Relationship" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="ERDiagram_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/erdiagram.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="ER Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Database entity relationship diagram" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Gantt Charts" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Gantt_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/gantt.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Gantt Chart" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Project timeline with tasks" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Pie Charts" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Pie_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/pie.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Pie Chart" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Simple pie chart with percentages" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Mind Maps" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Mindmap_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/mindmap.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Mind Map" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Hierarchical mind map" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Timelines" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Timeline_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/timeline.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Timeline" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Chronological timeline of events" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Git Graphs" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="GitGraph_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/gitgraph.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Git Graph" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Git branch and commit visualization" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="User Journeys" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Journey_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/journey.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="User Journey" FontWeight="SemiBold"/>
-                                        <TextBlock Text="User experience journey map" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Quadrant Charts" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Quadrant_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/quadrant.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Quadrant Chart" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Four-quadrant analysis chart" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Requirement Diagrams" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Requirement_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/requirement.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Requirement Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Requirements traceability" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="C4 Diagrams" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="C4_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/c4.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="C4 Context Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="System context with people and systems" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Sankey Diagrams" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Sankey_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/sankey.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Sankey Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Flow and energy distribution visualization" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="XY Charts" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="XYChart_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/xychart.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="XY Chart" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Bar and line charts with axes" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Block Diagrams" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="BlockDiagram_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/block.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Block Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Block-based system layout" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Packet Diagrams" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Packet_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/packet.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Packet Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Network packet structure visualization" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Kanban Boards" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Kanban_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/kanban.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Kanban Board" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Task board with columns and cards" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Architecture Diagrams" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Architecture_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/architecture.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Architecture Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="System architecture with services and connections" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="ZenUML Diagrams" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="ZenUML_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/zenuml.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="ZenUML Sequence Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Code-like sequence diagram syntax" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Radar Charts" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Radar_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/radar.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Radar Chart" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Multi-axis spider/radar comparison chart" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Treemaps" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Treemap_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/treemap.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Treemap" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Hierarchical data as nested rectangles" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
-                
-                            <TextBlock Text="Venn Diagrams" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="Venn_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/venn.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Venn Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Overlapping set relationships" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Button>
+                            <!-- Categorized templates (populated from code-behind) -->
+                            <StackPanel x:Name="DynamicTemplatesPanel"/>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
