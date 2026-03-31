@@ -1375,39 +1375,20 @@ Console.WriteLine(""Hello, World!"");
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(mermaidCode);
         
         // If page is already loaded, just update the diagram via JavaScript (preserves pan/zoom position)
-        if (_mermaidPageLoaded && !_hasNavigatedAway)
+        // When switching documents, always use full page reload to ensure correct layout
+        // (the updateDiagram fast path uses minWidth:2000px which distorts architecture diagrams)
+        if (_mermaidPageLoaded && !_hasNavigatedAway && !_isSwitchingDocuments)
         {
             try
             {
-                // When switching documents, we need to apply the document's zoom level, scroll position, and pan position
-                // Otherwise, preserve the current pan/zoom position for normal edits
-                if (_isSwitchingDocuments && _activeDocument != null)
-                {
-                    // Update diagram and pass the document's zoom level, scroll position, and pan position
-                    // This ensures the correct state is applied after the async render completes
-                    var scrollLeft = _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    var scrollTop = _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    var panX = _activeDocument.PreviewPanX.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    var panY = _activeDocument.PreviewPanY.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                        (function() {{
-                            if (typeof updateDiagram === 'function') {{
-                                updateDiagram({escapedCode}, {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)}, {scrollLeft}, {scrollTop}, {panX}, {panY});
-                            }}
-                        }})();
-                    ");
-                }
-                else
-                {
-                    // Update diagram without reloading the page - pan/zoom position is preserved
-                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                        (function() {{
-                            if (typeof updateDiagram === 'function') {{
-                                updateDiagram({escapedCode});
-                            }}
-                        }})();
-                    ");
-                }
+                // Update diagram without reloading the page - pan/zoom position is preserved
+                await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                    (function() {{
+                        if (typeof updateDiagram === 'function') {{
+                            updateDiagram({escapedCode});
+                        }}
+                    }})();
+                ");
                 StatusText.Text = "Mermaid rendered";
                 UpdateZoomUI();
                 return;
@@ -1891,9 +1872,7 @@ Console.WriteLine(""Hello, World!"");
             // Clear existing content and add new mermaid code
             diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
             diagram.classList.remove('has-error');
-            // Use the container's actual width as minWidth so Gantt/wide diagrams render
-            // at full width, but architecture diagrams don't get forced to an arbitrary 2000px
-            diagram.style.minWidth = container.clientWidth + 'px';
+            diagram.style.minWidth = '2000px';
             diagram.style.width = '';
             
             // Reset any transform on diagram before re-rendering
