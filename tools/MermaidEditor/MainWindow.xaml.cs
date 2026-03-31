@@ -958,52 +958,59 @@ Console.WriteLine(""Hello, World!"");
                     // Cancel the navigation — we'll scroll via JS instead
                     e.Cancel = true;
                     
-                    // Scroll the preview to the target heading
-                    var escapedAnchor = anchor.Replace("\\", "\\\\")
-                                              .Replace("'", "\\'")
-                                              .Replace("\"", "\\\"");
-                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync(
-                        $"(function() {{ " +
-                        $"  var el = document.getElementById('{escapedAnchor}'); " +
-                        $"  if (el) {{ el.scrollIntoView({{ behavior: 'smooth', block: 'start' }}); }} " +
-                        $"  else {{ " +
-                        $"    var headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6'); " +
-                        $"    for (var h of headings) {{ " +
-                        $"      var id = h.textContent.trim().toLowerCase().replace(/[^\\w\\s-]/g, '').replace(/\\s+/g, '-'); " +
-                        $"      if (id === '{escapedAnchor}') {{ h.scrollIntoView({{ behavior: 'smooth', block: 'start' }}); break; }} " +
-                        $"    }} " +
-                        $"  }} " +
-                        $"}})()");
-                    
-                    // Also scroll the code editor to the same heading
-                    // Instead of lossy reverse-conversion, search heading lines in source
-                    // and generate anchors from them to compare with the clicked anchor
-                    var decodedAnchor = Uri.UnescapeDataString(anchor).ToLowerInvariant();
-                    var sourceText = CodeEditor.Text;
-                    var sourceLines = sourceText.Split('\n');
-                    string? matchedHeadingText = null;
-                    foreach (var srcLine in sourceLines)
+                    try
                     {
-                        var trimmed = srcLine.TrimStart();
-                        if (trimmed.StartsWith("#"))
+                        // Scroll the preview to the target heading
+                        var escapedAnchor = anchor.Replace("\\", "\\\\")
+                                                  .Replace("'", "\\'")
+                                                  .Replace("\"", "\\\"");
+                        await PreviewWebView.CoreWebView2.ExecuteScriptAsync(
+                            $"(function() {{ " +
+                            $"  var el = document.getElementById('{escapedAnchor}'); " +
+                            $"  if (el) {{ el.scrollIntoView({{ behavior: 'smooth', block: 'start' }}); }} " +
+                            $"  else {{ " +
+                            $"    var headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6'); " +
+                            $"    for (var h of headings) {{ " +
+                            $"      var id = h.textContent.trim().toLowerCase().replace(/[^\\w\\s-]/g, '').replace(/\\s+/g, '-'); " +
+                            $"      if (id === '{escapedAnchor}') {{ h.scrollIntoView({{ behavior: 'smooth', block: 'start' }}); break; }} " +
+                            $"    }} " +
+                            $"  }} " +
+                            $"}})()");
+                        
+                        // Also scroll the code editor to the same heading
+                        // Instead of lossy reverse-conversion, search heading lines in source
+                        // and generate anchors from them to compare with the clicked anchor
+                        var decodedAnchor = Uri.UnescapeDataString(anchor).ToLowerInvariant();
+                        var sourceText = CodeEditor.Text;
+                        var sourceLines = sourceText.Split('\n');
+                        string? matchedHeadingText = null;
+                        foreach (var srcLine in sourceLines)
                         {
-                            // Extract heading text after # symbols
-                            var headingContent = trimmed.TrimStart('#').Trim();
-                            // Generate anchor using same algorithm as Markdown renderers:
-                            // lowercase, strip non-word chars except hyphens/spaces, replace spaces with hyphens
-                            var generatedAnchor = headingContent.ToLowerInvariant();
-                            generatedAnchor = System.Text.RegularExpressions.Regex.Replace(generatedAnchor, @"[^\w\s-]", "");
-                            generatedAnchor = System.Text.RegularExpressions.Regex.Replace(generatedAnchor, @"\s+", "-");
-                            if (generatedAnchor == decodedAnchor)
+                            var trimmed = srcLine.TrimStart();
+                            if (trimmed.StartsWith("#"))
                             {
-                                matchedHeadingText = headingContent;
-                                break;
+                                // Extract heading text after # symbols
+                                var headingContent = trimmed.TrimStart('#').Trim();
+                                // Generate anchor using same algorithm as marked.js:
+                                // lowercase, strip non-ASCII and non-word chars, replace spaces with hyphens
+                                var generatedAnchor = headingContent.ToLowerInvariant();
+                                generatedAnchor = System.Text.RegularExpressions.Regex.Replace(generatedAnchor, @"[^a-z0-9_\s-]", "");
+                                generatedAnchor = System.Text.RegularExpressions.Regex.Replace(generatedAnchor, @"\s+", "-");
+                                if (generatedAnchor == decodedAnchor)
+                                {
+                                    matchedHeadingText = headingContent;
+                                    break;
+                                }
                             }
                         }
+                        if (matchedHeadingText != null)
+                        {
+                            FindAndHighlightInEditor(null, matchedHeadingText, "heading");
+                        }
                     }
-                    if (matchedHeadingText != null)
+                    catch
                     {
-                        FindAndHighlightInEditor(null, matchedHeadingText, "heading");
+                        // Best-effort scroll/highlight — ignore errors during shutdown or disposal
                     }
                 }
             }
