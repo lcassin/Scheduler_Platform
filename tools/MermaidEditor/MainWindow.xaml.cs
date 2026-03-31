@@ -1581,6 +1581,11 @@ Console.WriteLine(""Hello, World!"");
                 }} catch (e) {{
                     // getBBox may fail in some cases, just continue
                 }}
+            }} else {{
+                // No SVG found (e.g. ZenUML renders to DOM elements, not SVG)
+                // Still shrink #diagram back from 2000px to fit actual rendered content
+                diagram.style.minWidth = 'auto';
+                diagram.style.width = 'auto';
             }}
             
             window.panzoomInstance = panzoom(diagram, {{
