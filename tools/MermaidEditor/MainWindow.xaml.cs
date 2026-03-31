@@ -1548,7 +1548,8 @@ Console.WriteLine(""Hello, World!"");
             var codeText = document.querySelector('#diagram pre.mermaid');
             var isArchitecture = codeText && /^\s*architecture/m.test(codeText.textContent);
             if (isArchitecture) {{
-                diagram.style.minWidth = container.clientWidth + 'px';
+                // Use window.innerWidth for architecture since container may not be laid out yet
+                diagram.style.minWidth = (window.innerWidth - 60) + 'px';
             }} else {{
                 diagram.style.minWidth = '2000px';
             }}
@@ -1880,9 +1881,9 @@ Console.WriteLine(""Hello, World!"");
             diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
             diagram.classList.remove('has-error');
             // Set minWidth for wide diagrams. Architecture diagrams use container
-            // width for layout, so use container width instead of 2000px.
+            // width for layout, so use viewport width instead of 2000px.
             var isArch = /^\s*architecture/m.test(newCode);
-            diagram.style.minWidth = isArch ? (container.clientWidth + 'px') : '2000px';
+            diagram.style.minWidth = isArch ? ((window.innerWidth - 60) + 'px') : '2000px';
             diagram.style.width = '';
             
             // Reset any transform on diagram before re-rendering
