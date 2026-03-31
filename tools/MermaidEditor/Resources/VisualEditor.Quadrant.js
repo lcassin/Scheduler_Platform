@@ -37,6 +37,9 @@ window.restoreQuadrantDiagram = function(jsonStr) {
 
 window.refreshQuadrantDiagram = function(jsonStr) {
     try {
+        // Don't refresh during an active drag — it would destroy the SVG and
+        // lose the mouseup listener that sends the final position to C#.
+        if (quadrantDragState) return;
         quadrantModel = JSON.parse(jsonStr);
         renderQuadrantDiagram();
     } catch (e) {
@@ -401,6 +404,9 @@ function renderQuadrantDiagram() {
                 if (e.button !== 0) return; // left click only
                 e.stopPropagation();
                 e.preventDefault();
+                // Close property panel if open so stale values don't overwrite drag
+                const pp = document.getElementById('property-panel');
+                if (pp) pp.classList.remove('visible');
                 quadrantSelectedPoint = idx;
                 quadrantDragState = {
                     index: idx,
