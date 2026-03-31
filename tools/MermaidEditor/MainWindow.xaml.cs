@@ -427,6 +427,9 @@ Console.WriteLine(""Hello, World!"");
             "<Word>journey</Word><Word>gantt</Word><Word>pie</Word><Word>mindmap</Word>" +
             "<Word>timeline</Word><Word>gitGraph</Word><Word>quadrantChart</Word>" +
             "<Word>requirementDiagram</Word><Word>C4Context</Word><Word>C4Container</Word><Word>C4Component</Word><Word>C4Dynamic</Word><Word>C4Deployment</Word>" +
+            "<Word>sankey-beta</Word><Word>xychart-beta</Word><Word>block-beta</Word><Word>packet-beta</Word>" +
+            "<Word>kanban</Word><Word>architecture-beta</Word><Word>zenuml</Word>" +
+            "<Word>radar-beta</Word><Word>treemap-beta</Word><Word>venn-beta</Word>" +
             "</Keywords>" +
             "<Keywords color=\"Keyword\">" +
             "<Word>subgraph</Word><Word>end</Word><Word>direction</Word>" +
@@ -552,6 +555,12 @@ Console.WriteLine(""Hello, World!"");
             ("sankey-beta", "Sankey diagram (beta)"),
             ("xychart-beta", "XY chart (beta)"),
             ("block-beta", "Block diagram (beta)"),
+            ("packet-beta", "Packet diagram (beta)"),
+            ("kanban", "Kanban board"),
+            ("architecture-beta", "Architecture diagram (beta)"),
+            ("radar-beta", "Radar/spider chart (beta)"),
+            ("treemap-beta", "Treemap diagram (beta)"),
+            ("venn-beta", "Venn diagram (beta)"),
             
             ("subgraph", "Define a subgraph"),
             ("end", "End subgraph/block"),
@@ -936,7 +945,12 @@ Console.WriteLine(""Hello, World!"");
             // Check if this is an anchor link (hash-only navigation)
             // WebView2 turns "#anchor" into "https://localfiles.mermaideditor/#anchor"
             var hashIndex = uri.IndexOf('#');
-            if (hashIndex >= 0 && !_isRenderingContent)
+            var baseUrl = hashIndex >= 0 ? uri.Substring(0, hashIndex) : uri;
+            var isLocalAnchor = string.IsNullOrEmpty(baseUrl) 
+                || baseUrl.Equals($"https://{VirtualHostName}/", StringComparison.OrdinalIgnoreCase)
+                || baseUrl.Equals($"https://{VirtualHostName}", StringComparison.OrdinalIgnoreCase)
+                || baseUrl.Equals("about:blank", StringComparison.OrdinalIgnoreCase);
+            if (hashIndex >= 0 && isLocalAnchor && !_isRenderingContent)
             {
                 var anchor = uri.Substring(hashIndex + 1);
                 if (!string.IsNullOrEmpty(anchor))
@@ -944,52 +958,59 @@ Console.WriteLine(""Hello, World!"");
                     // Cancel the navigation — we'll scroll via JS instead
                     e.Cancel = true;
                     
-                    // Scroll the preview to the target heading
-                    var escapedAnchor = anchor.Replace("\\", "\\\\")
-                                              .Replace("'", "\\'")
-                                              .Replace("\"", "\\\"");
-                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync(
-                        $"(function() {{ " +
-                        $"  var el = document.getElementById('{escapedAnchor}'); " +
-                        $"  if (el) {{ el.scrollIntoView({{ behavior: 'smooth', block: 'start' }}); }} " +
-                        $"  else {{ " +
-                        $"    var headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6'); " +
-                        $"    for (var h of headings) {{ " +
-                        $"      var id = h.textContent.trim().toLowerCase().replace(/[^\\w\\s-]/g, '').replace(/\\s+/g, '-'); " +
-                        $"      if (id === '{escapedAnchor}') {{ h.scrollIntoView({{ behavior: 'smooth', block: 'start' }}); break; }} " +
-                        $"    }} " +
-                        $"  }} " +
-                        $"}})()");
-                    
-                    // Also scroll the code editor to the same heading
-                    // Instead of lossy reverse-conversion, search heading lines in source
-                    // and generate anchors from them to compare with the clicked anchor
-                    var decodedAnchor = Uri.UnescapeDataString(anchor).ToLowerInvariant();
-                    var sourceText = CodeEditor.Text;
-                    var sourceLines = sourceText.Split('\n');
-                    string? matchedHeadingText = null;
-                    foreach (var srcLine in sourceLines)
+                    try
                     {
-                        var trimmed = srcLine.TrimStart();
-                        if (trimmed.StartsWith("#"))
+                        // Scroll the preview to the target heading
+                        var escapedAnchor = anchor.Replace("\\", "\\\\")
+                                                  .Replace("'", "\\'")
+                                                  .Replace("\"", "\\\"");
+                        await PreviewWebView.CoreWebView2.ExecuteScriptAsync(
+                            $"(function() {{ " +
+                            $"  var el = document.getElementById('{escapedAnchor}'); " +
+                            $"  if (el) {{ el.scrollIntoView({{ behavior: 'smooth', block: 'start' }}); }} " +
+                            $"  else {{ " +
+                            $"    var headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6'); " +
+                            $"    for (var h of headings) {{ " +
+                            $"      var id = h.textContent.trim().toLowerCase().replace(/[^\\w\\s-]/g, '').replace(/\\s+/g, '-'); " +
+                            $"      if (id === '{escapedAnchor}') {{ h.scrollIntoView({{ behavior: 'smooth', block: 'start' }}); break; }} " +
+                            $"    }} " +
+                            $"  }} " +
+                            $"}})()");
+                        
+                        // Also scroll the code editor to the same heading
+                        // Instead of lossy reverse-conversion, search heading lines in source
+                        // and generate anchors from them to compare with the clicked anchor
+                        var decodedAnchor = Uri.UnescapeDataString(anchor).ToLowerInvariant();
+                        var sourceText = CodeEditor.Text;
+                        var sourceLines = sourceText.Split('\n');
+                        string? matchedHeadingText = null;
+                        foreach (var srcLine in sourceLines)
                         {
-                            // Extract heading text after # symbols
-                            var headingContent = trimmed.TrimStart('#').Trim();
-                            // Generate anchor using same algorithm as Markdown renderers:
-                            // lowercase, strip non-word chars except hyphens/spaces, replace spaces with hyphens
-                            var generatedAnchor = headingContent.ToLowerInvariant();
-                            generatedAnchor = System.Text.RegularExpressions.Regex.Replace(generatedAnchor, @"[^\w\s-]", "");
-                            generatedAnchor = System.Text.RegularExpressions.Regex.Replace(generatedAnchor, @"\s+", "-");
-                            if (generatedAnchor == decodedAnchor)
+                            var trimmed = srcLine.TrimStart();
+                            if (trimmed.StartsWith("#"))
                             {
-                                matchedHeadingText = headingContent;
-                                break;
+                                // Extract heading text after # symbols
+                                var headingContent = trimmed.TrimStart('#').Trim();
+                                // Generate anchor using same algorithm as marked.js:
+                                // lowercase, strip non-ASCII and non-word chars, replace spaces with hyphens
+                                var generatedAnchor = headingContent.ToLowerInvariant();
+                                generatedAnchor = System.Text.RegularExpressions.Regex.Replace(generatedAnchor, @"[^a-z0-9_\s-]", "");
+                                generatedAnchor = System.Text.RegularExpressions.Regex.Replace(generatedAnchor, @"\s+", "-");
+                                if (generatedAnchor == decodedAnchor)
+                                {
+                                    matchedHeadingText = headingContent;
+                                    break;
+                                }
                             }
                         }
+                        if (matchedHeadingText != null)
+                        {
+                            FindAndHighlightInEditor(null, matchedHeadingText, "heading");
+                        }
                     }
-                    if (matchedHeadingText != null)
+                    catch
                     {
-                        FindAndHighlightInEditor(null, matchedHeadingText, "heading");
+                        // Best-effort scroll/highlight — ignore errors during shutdown or disposal
                     }
                 }
             }
@@ -7748,6 +7769,9 @@ Console.WriteLine(""Hello, World!"");
             "<Word>journey</Word><Word>gantt</Word><Word>pie</Word><Word>mindmap</Word>" +
             "<Word>timeline</Word><Word>gitGraph</Word><Word>quadrantChart</Word>" +
             "<Word>requirementDiagram</Word><Word>C4Context</Word><Word>C4Container</Word><Word>C4Component</Word><Word>C4Dynamic</Word><Word>C4Deployment</Word>" +
+            "<Word>sankey-beta</Word><Word>xychart-beta</Word><Word>block-beta</Word><Word>packet-beta</Word>" +
+            "<Word>kanban</Word><Word>architecture-beta</Word><Word>zenuml</Word>" +
+            "<Word>radar-beta</Word><Word>treemap-beta</Word><Word>venn-beta</Word>" +
             "</Keywords>" +
             "<Keywords color=\"Keyword\">" +
             "<Word>subgraph</Word><Word>end</Word><Word>direction</Word>" +
