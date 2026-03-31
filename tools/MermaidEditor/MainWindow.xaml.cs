@@ -442,6 +442,18 @@ Console.WriteLine(""Hello, World!"");
             "<Word>interfaceRequirement</Word><Word>physicalRequirement</Word><Word>designConstraint</Word>" +
             "<Word>element</Word><Word>satisfies</Word><Word>traces</Word><Word>contains</Word>" +
             "<Word>derives</Word><Word>refines</Word><Word>verifies</Word><Word>copies</Word>" +
+            // Kanban keywords
+            "<Word>column</Word><Word>task</Word>" +
+            // Block diagram keywords
+            "<Word>columns</Word><Word>space</Word>" +
+            // Architecture keywords
+            "<Word>service</Word><Word>group</Word><Word>junction</Word>" +
+            // Radar keywords
+            "<Word>axis</Word><Word>curve</Word><Word>max</Word><Word>graticule</Word>" +
+            // Venn keywords
+            "<Word>set</Word><Word>union</Word>" +
+            // XY Chart keywords
+            "<Word>x-axis</Word><Word>y-axis</Word>" +
             "</Keywords>" +
             "</RuleSet>" +
             "</SyntaxDefinition>";
@@ -1440,6 +1452,20 @@ Console.WriteLine(""Hello, World!"");
 <html>
 <head>
     <meta charset=""UTF-8"">
+    <script>
+        // Shim localStorage for WebView2 sandboxed contexts (ZenUML needs it)
+        try {{ window.localStorage; }} catch(e) {{
+            var _ls = {{}};
+            Object.defineProperty(window, 'localStorage', {{ value: {{
+                getItem: function(k) {{ return _ls[k] || null; }},
+                setItem: function(k,v) {{ _ls[k] = String(v); }},
+                removeItem: function(k) {{ delete _ls[k]; }},
+                clear: function() {{ _ls = {{}}; }},
+                get length() {{ return Object.keys(_ls).length; }},
+                key: function(i) {{ return Object.keys(_ls)[i] || null; }}
+            }}}});
+        }}
+    </script>
     <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs"" type=""module""></script>
     <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>
@@ -2096,6 +2122,20 @@ Console.WriteLine(""Hello, World!"");
 <head>
     <meta charset=""UTF-8"">
     {baseTag}
+    <script>
+        // Shim localStorage for WebView2 sandboxed contexts (ZenUML needs it)
+        try {{ window.localStorage; }} catch(e) {{
+            var _ls = {{}};
+            Object.defineProperty(window, 'localStorage', {{ value: {{
+                getItem: function(k) {{ return _ls[k] || null; }},
+                setItem: function(k,v) {{ _ls[k] = String(v); }},
+                removeItem: function(k) {{ delete _ls[k]; }},
+                clear: function() {{ _ls = {{}}; }},
+                get length() {{ return Object.keys(_ls).length; }},
+                key: function(i) {{ return Object.keys(_ls)[i] || null; }}
+            }}}});
+        }}
+    </script>
     <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
     <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-{mdCssVariant}.min.css"">
     <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/highlight.js@11/styles/{mdHljsStyle}.min.css"">
@@ -7846,6 +7886,18 @@ Console.WriteLine(""Hello, World!"");
             "<Word>interfaceRequirement</Word><Word>physicalRequirement</Word><Word>designConstraint</Word>" +
             "<Word>element</Word><Word>satisfies</Word><Word>traces</Word><Word>contains</Word>" +
             "<Word>derives</Word><Word>refines</Word><Word>verifies</Word><Word>copies</Word>" +
+            // Kanban keywords
+            "<Word>column</Word><Word>task</Word>" +
+            // Block diagram keywords
+            "<Word>columns</Word><Word>space</Word>" +
+            // Architecture keywords
+            "<Word>service</Word><Word>group</Word><Word>junction</Word>" +
+            // Radar keywords
+            "<Word>axis</Word><Word>curve</Word><Word>max</Word><Word>graticule</Word>" +
+            // Venn keywords
+            "<Word>set</Word><Word>union</Word>" +
+            // XY Chart keywords
+            "<Word>x-axis</Word><Word>y-axis</Word>" +
             "</Keywords>" +
             "</RuleSet>" +
             "</SyntaxDefinition>";
@@ -7971,6 +8023,20 @@ Console.WriteLine(""Hello, World!"");
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
+    <script>
+        // Shim localStorage for WebView2 sandboxed contexts (ZenUML needs it)
+        try {{ window.localStorage; }} catch(e) {{
+            var _ls = {{}};
+            Object.defineProperty(window, 'localStorage', {{ value: {{
+                getItem: function(k) {{ return _ls[k] || null; }},
+                setItem: function(k,v) {{ _ls[k] = String(v); }},
+                removeItem: function(k) {{ delete _ls[k]; }},
+                clear: function() {{ _ls = {{}}; }},
+                get length() {{ return Object.keys(_ls).length; }},
+                key: function(i) {{ return Object.keys(_ls)[i] || null; }}
+            }}}});
+        }}
+    </script>
     <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs"" type=""module""></script>
     <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>

@@ -363,9 +363,7 @@ Bio-conversion,Gas,81.144",
     line [5000, 6000, 7500, 8200, 9500, 10500]",
             "Block" => @"block-beta
     columns 3
-    a[""Frontend""] b[""Backend""] c[""Database""]
-    space
-    d[""API Gateway""]:3",
+    a[""Frontend""] b[""Backend""] c[""Database""]",
             "Packet" => @"packet-beta
     0-15: ""Source Port""
     16-31: ""Destination Port""
@@ -1314,16 +1312,16 @@ Thermal generation,District heating,46.184
     columns 3
 
     doc(""Document""):3
-    space down1<["" ""]>(down) space
+    blockArrowDown1<[""&nbsp;&nbsp;&nbsp;""]>(down):3
 
-    block:3
+    block:services:3
         columns 3
         a[""Frontend""] b[""API Gateway""] c[""Auth Service""]
     end
 
-    space down2<["" ""]>(down) space
+    blockArrowDown2<[""&nbsp;&nbsp;&nbsp;""]>(down):3
 
-    block:3
+    block:data:3
         columns 2
         d[""Database""] e[""Cache""]
     end
@@ -1332,9 +1330,9 @@ Thermal generation,District heating,46.184
     %% columns N - Set number of columns
     %% id[""Label""] - Block with label
     %% id[""Label""]:N - Block spanning N columns
-    %% block:N ... end - Nested block group
-    %% space - Empty space
-    %% id<[""Label""]>(shape) - Shaped block");
+    %% block:id:N ... end - Nested block group
+    %% space - Empty space placeholder
+    %% blockArrowId<[""Label""]>(direction) - Arrow block (down/up/left/right)");
     }
 
     private void Packet_Click(object sender, RoutedEventArgs e)
