@@ -2590,11 +2590,11 @@ Console.WriteLine(""Hello, World!"");
                 if (messageType == "zoom" && message.RootElement.TryGetProperty("level", out var levelElement))
                 {
                     _currentZoom = levelElement.GetDouble();
-                    // Also update the active document's zoom so it's preserved when switching tabs
-                    if (_activeDocument != null)
-                    {
-                        _activeDocument.PreviewZoom = _currentZoom;
-                    }
+                    // Don't update _activeDocument.PreviewZoom here — postMessage is async,
+                    // so stale zoom events from the previous tab's panzoom can arrive after
+                    // _activeDocument has switched to a new document, corrupting its zoom.
+                    // PreviewZoom is saved at well-defined sync points: SwitchToDocument,
+                    // SaveActiveDocumentState, ResetZoom, ZoomSlider, ApplyZoom.
                     UpdateZoomUI();
                 }
                 else if (messageType == "pngExport" && message.RootElement.TryGetProperty("data", out var dataElement))
