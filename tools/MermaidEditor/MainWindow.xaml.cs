@@ -1391,7 +1391,8 @@ Console.WriteLine(""Hello, World!"");
                     var tScrollTop = _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     var tPanX = _activeDocument.PreviewPanX.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     var tPanY = _activeDocument.PreviewPanY.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    var tFit = _activeDocument.PreviewFitToWindow ? "true" : "false";
+                    // Force fitToWindow for documents never viewed (zoom=0) to avoid invisible diagram
+                    var tFit = (_activeDocument.PreviewFitToWindow || _activeDocument.PreviewZoom <= 0) ? "true" : "false";
                     
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
                         (function() {{
@@ -1439,7 +1440,8 @@ Console.WriteLine(""Hello, World!"");
         var targetZoom = (_isSwitchingDocuments && _activeDocument != null) 
             ? _activeDocument.PreviewZoom.ToString(System.Globalization.CultureInfo.InvariantCulture) 
             : "1";
-        var targetFitToWindow = (_isSwitchingDocuments && _activeDocument != null && _activeDocument.PreviewFitToWindow) 
+        var targetFitToWindow = (_isSwitchingDocuments && _activeDocument != null 
+            && (_activeDocument.PreviewFitToWindow || _activeDocument.PreviewZoom <= 0)) 
             ? "true" : "false";
 
         var theme = ThemeManager.CurrentTheme;
@@ -1878,10 +1880,13 @@ Console.WriteLine(""Hello, World!"");
             // Clear existing content and add new mermaid code
             diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
             diagram.classList.remove('has-error');
-            // Set minWidth for wide diagrams. Architecture diagrams use container
-            // width for layout, so use viewport width instead of 2000px.
+            // Detect diagram types that adapt to container width.
+            // These need viewport-width containers; 2000px would create oversized canvas.
             var isArch = /^\s*architecture/m.test(newCode);
-            diagram.style.minWidth = isArch ? ((window.innerWidth - 60) + 'px') : '2000px';
+            var isGantt = /^\s*gantt/m.test(newCode);
+            var isZenUML = /^\s*zenuml/m.test(newCode);
+            var usesContainerWidth = isArch || isGantt || isZenUML;
+            diagram.style.minWidth = usesContainerWidth ? ((window.innerWidth - 60) + 'px') : '2000px';
             diagram.style.width = '';
             
             // Reset any transform on diagram before re-rendering
@@ -1943,8 +1948,8 @@ Console.WriteLine(""Hello, World!"");
                                 // We run AFTER Mermaid, so our inline styles win.
                                 svg.style.maxWidth = 'none';
                                 
-                                if (isArch) {{
-                                    // Architecture diagrams lay out based on container width.
+                                if (usesContainerWidth) {{
+                                    // Gantt/architecture/ZenUML lay out based on container width.
                                     // Keep the viewport-width minWidth so the layout isn't collapsed.
                                     // Only set height from getBBox; width stays as rendered.
                                     svg.style.height = svgHeight + 'px';
@@ -2023,25 +2028,9 @@ Console.WriteLine(""Hello, World!"");
                                 return;
                             }}
                             
-                            // Temporarily shrink the container so the DOM content
-                            // takes its natural (intrinsic) width instead of stretching
-                            // to fill the 2000px rendering container.
-                            diagram.style.minWidth = '0';
-                            diagram.style.width = 'fit-content';
-                            // Force reflow so the browser recalculates layout
-                            diagram.offsetWidth;
-                            
-                            var contentWidth = contentEl.scrollWidth || contentEl.offsetWidth;
-                            var contentHeight = contentEl.scrollHeight || contentEl.offsetHeight;
-                            
-                            // Set diagram card to the measured content size
-                            if (contentWidth > 0) {{
-                                diagram.style.minWidth = (contentWidth + 20) + 'px';
-                                diagram.style.width = (contentWidth + 20) + 'px';
-                            }} else {{
-                                diagram.style.minWidth = 'auto';
-                                diagram.style.width = 'auto';
-                            }}
+                            // ZenUML (and other DOM-based diagrams) adapt to container width.
+                            // Since we already set the container to viewport width before rendering,
+                            // just keep it as-is. No shrinking needed.
                             
                             // Set up panzoom for non-SVG content
                             window.panzoomInstance = panzoom(diagram, {{
