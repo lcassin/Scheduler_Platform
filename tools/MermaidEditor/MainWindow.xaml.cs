@@ -1401,7 +1401,7 @@ Console.WriteLine(""Hello, World!"");
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
                         (function() {{
                             if (typeof updateDiagram === 'function') {{
-                                updateDiagram({escapedCode}, {tZoom}, {tScrollLeft}, {tScrollTop}, {tPanX}, {tPanY}, {tFit});
+                                updateDiagram({escapedCode}, {tZoom}, {tScrollLeft}, {tScrollTop}, {tPanX}, {tPanY}, {tFit}, {_expectedRenderGen});
                             }}
                         }})();
                     ");
@@ -1412,7 +1412,7 @@ Console.WriteLine(""Hello, World!"");
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
                         (function() {{
                             if (typeof updateDiagram === 'function') {{
-                                updateDiagram({escapedCode});
+                                updateDiagram({escapedCode}, undefined, undefined, undefined, undefined, undefined, undefined, {_expectedRenderGen});
                             }}
                         }})();
                     ");
@@ -1587,7 +1587,7 @@ Console.WriteLine(""Hello, World!"");
             // Clear the pre element (updateDiagram will recreate it)
             diagram.innerHTML = '';
             // Use updateDiagram with the target restore positions
-            window.updateDiagram(code, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY, fitAfterRender);
+            window.updateDiagram(code, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY, fitAfterRender, window._renderGen);
         }}).catch(() => {{
             // Fallback: just initialize panzoom on whatever is rendered
             const diagram = document.getElementById('diagram');
@@ -1867,9 +1867,16 @@ Console.WriteLine(""Hello, World!"");
         // Optional targetScrollLeft/targetScrollTop parameters allow overriding scroll position (used when switching documents)
         // Optional targetPanX/targetPanY parameters allow overriding pan position (used when switching documents)
         // Optional fitAfterRender parameter: if true, call fitToWindow() after render instead of restoring saved zoom/pan
-        window.updateDiagram = function(newCode, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY, fitAfterRender) {{
-            // Increment render generation to invalidate any pending callbacks from previous renders
-            var thisGen = ++window._renderGen;
+        window.updateDiagram = function(newCode, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY, fitAfterRender, renderGen) {{
+            // Set render generation from C# to keep in sync (C# increments _expectedRenderGen
+            // before calling updateDiagram, so we just adopt that value here).
+            // If renderGen is not provided (legacy), increment locally as fallback.
+            if (typeof renderGen === 'number') {{
+                window._renderGen = renderGen;
+            }} else {{
+                window._renderGen++;
+            }}
+            var thisGen = window._renderGen;
             
             // Save current panzoom transform (only zoom level, not position - position causes issues when diagram size changes)
             // If targetZoom is provided, use that instead of the current zoom (for document switching)
