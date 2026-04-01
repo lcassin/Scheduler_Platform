@@ -1920,8 +1920,11 @@ Console.WriteLine(""Hello, World!"");
                             let svgHeight = 0;
                             
                             // Use getBBox for accurate dimensions (includes all rendered content)
+                            var bboxX = 0, bboxY = 0;
                             try {{
                                 const bbox = svg.getBBox();
+                                bboxX = bbox.x;
+                                bboxY = bbox.y;
                                 svgWidth = bbox.width + 40;
                                 svgHeight = bbox.height + 40;
                             }} catch (e) {{
@@ -1930,6 +1933,8 @@ Console.WriteLine(""Hello, World!"");
                                 if (viewBox) {{
                                     const parts = viewBox.split(' ');
                                     if (parts.length === 4) {{
+                                        bboxX = parseFloat(parts[0]);
+                                        bboxY = parseFloat(parts[1]);
                                         svgWidth = parseFloat(parts[2]);
                                         svgHeight = parseFloat(parts[3]);
                                     }}
@@ -1943,6 +1948,12 @@ Console.WriteLine(""Hello, World!"");
                                 svg.removeAttribute('width');
                                 svg.removeAttribute('height');
                                 svg.style.maxWidth = 'none';
+                                
+                                // Crop the viewBox to match actual content bounds (with padding).
+                                // Mermaid often sets viewBox larger than the content, causing empty
+                                // space in the rendered SVG even when width/height are correct.
+                                svg.setAttribute('viewBox', 
+                                    (bboxX - 20) + ' ' + (bboxY - 20) + ' ' + svgWidth + ' ' + svgHeight);
                                 
                                 if (isArch) {{
                                     // Architecture diagrams lay out based on container width.
