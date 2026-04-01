@@ -1594,6 +1594,12 @@ Console.WriteLine(""Hello, World!"");
                 boundsPadding: 0.1
             }});
             
+            // Register zoom handler FIRST (before any zoom calls)
+            window.panzoomInstance.on('zoom', function(e) {{
+                window.currentZoom = e.getTransform().scale;
+                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
+            }});
+            
             // Restore zoom and pan position (use target values if switching documents, otherwise reset to default)
             var restoreZoom = (targetPanX !== 0 || targetPanY !== 0 || targetZoom !== 1) ? targetZoom : 1;
             var restorePanX = targetPanX;
@@ -1621,11 +1627,6 @@ Console.WriteLine(""Hello, World!"");
                     targetPanY: restorePanY
                 }});
             }}, 50);
-            
-            window.panzoomInstance.on('zoom', function(e) {{
-                window.currentZoom = e.getTransform().scale;
-                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
-            }});
             
             // Add click handlers to diagram nodes for click-to-highlight feature
             setupNodeClickHandlers(svg);
@@ -1982,6 +1983,12 @@ Console.WriteLine(""Hello, World!"");
                                 boundsPadding: 0.1
                             }});
                             
+                            // Register zoom handler FIRST (before any zoom calls)
+                            window.panzoomInstance.on('zoom', function(e) {{
+                                window.currentZoom = e.getTransform().scale;
+                                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
+                            }});
+                            
                             // Restore zoom level (fitToWindow is handled by C# after diagramReady)
                             if (!fitAfterRender) {{
                                 window.panzoomInstance.zoomAbs(0, 0, savedZoom);
@@ -2007,11 +2014,6 @@ Console.WriteLine(""Hello, World!"");
                                     fitAfterRender: !!fitAfterRender
                                 }});
                             }}, 50);
-                            
-                            window.panzoomInstance.on('zoom', function(e) {{
-                                window.currentZoom = e.getTransform().scale;
-                                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
-                            }});
                         }});
                     }} else {{
                         // No SVG found (e.g. ZenUML renders to DOM elements, not SVG)
@@ -2040,6 +2042,11 @@ Console.WriteLine(""Hello, World!"");
                                 bounds: false,
                                 boundsPadding: 0.1
                             }});
+                            // Register zoom handler FIRST (before any zoom calls)
+                            window.panzoomInstance.on('zoom', function(e) {{
+                                window.currentZoom = e.getTransform().scale;
+                                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
+                            }});
                             if (!fitAfterRender) {{
                                 window.panzoomInstance.zoomAbs(0, 0, savedZoom);
                                 window.currentZoom = savedZoom;
@@ -2058,10 +2065,6 @@ Console.WriteLine(""Hello, World!"");
                                     fitAfterRender: !!fitAfterRender
                                 }});
                             }}, 50);
-                            window.panzoomInstance.on('zoom', function(e) {{
-                                window.currentZoom = e.getTransform().scale;
-                                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
-                            }});
                         }};
                         // Give ZenUML time to render its DOM content
                         setTimeout(setupNonSvg, 300);
@@ -9548,6 +9551,13 @@ Console.WriteLine(""Hello, World!"");
         // and keeps the back button disabled for fresh renders
         // Note: _isSwitchingDocuments stays true during RenderPreview() so zoom can be restored
         RenderPreview();
+        
+        // Stop the render timer to prevent a duplicate render from TextChanged.
+        // Swapping CodeEditor.Document fires TextChanged which starts the 500ms timer.
+        // Without this, the timer-triggered render would re-render without the switching
+        // context, destroying the zoom/pan restoration (especially for ZenUML/Gantt whose
+        // async setup races with the 500ms timer).
+        _renderTimer.Stop();
         
         _isSwitchingDocuments = false;
         
