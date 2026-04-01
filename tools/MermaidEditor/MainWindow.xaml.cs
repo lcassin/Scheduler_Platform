@@ -87,6 +87,7 @@ public partial class MainWindow : Window
     private bool _hasNavigatedAway; // Track if user has navigated away from rendered content
     private bool _markdownPageLoaded; // Track if Markdown page structure is already loaded (for incremental updates)
     private bool _mermaidPageLoaded; // Track if Mermaid page structure is already loaded (for incremental updates)
+    private int _expectedRenderGen; // C# mirror of window._renderGen — zoom events with stale gen are ignored
     
     // File change detection
     private FileSystemWatcher? _fileWatcher;
@@ -1363,6 +1364,9 @@ Console.WriteLine(""Hello, World!"");
         
         // Reset markdown page loaded flag since we're switching to Mermaid mode
         _markdownPageLoaded = false;
+        
+        // Increment render generation so stale zoom events from previous renders are ignored
+        _expectedRenderGen++;
 
         var mermaidCode = CodeEditor.Text;
 
@@ -1548,7 +1552,8 @@ Console.WriteLine(""Hello, World!"");
         window.panzoomInstance = null;
         window.currentZoom = {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)};
         // Render generation counter to prevent stale callbacks from previous renders
-        window._renderGen = 0;
+        // Initialized to match C#'s _expectedRenderGen so zoom events carry the correct gen
+        window._renderGen = {_expectedRenderGen};
         
         // Target positions for restoration when switching documents
         var targetScrollLeft = {targetScrollLeft};
@@ -1597,7 +1602,7 @@ Console.WriteLine(""Hello, World!"");
             // Register zoom handler FIRST (before any zoom calls)
             window.panzoomInstance.on('zoom', function(e) {{
                 window.currentZoom = e.getTransform().scale;
-                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
+                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom, renderGen: window._renderGen }});
             }});
             
             // Restore zoom and pan position (use target values if switching documents, otherwise reset to default)
@@ -1745,13 +1750,20 @@ Console.WriteLine(""Hello, World!"");
                     const diagramRect = diagram.getBoundingClientRect();
                     const containerRect = container.getBoundingClientRect();
                     
-                    const scaleX = (containerRect.width - 40) / diagramRect.width;
-                    const scaleY = (containerRect.height - 40) / diagramRect.height;
+                    // Account for scrollbar width/height (~17px) so diagram fits
+                    // within the visible area without triggering scrollbars
+                    var scrollbarW = container.offsetWidth - container.clientWidth;
+                    var scrollbarH = container.offsetHeight - container.clientHeight;
+                    var availW = containerRect.width - 40 - scrollbarW;
+                    var availH = containerRect.height - 40 - scrollbarH;
+                    
+                    const scaleX = availW / diagramRect.width;
+                    const scaleY = availH / diagramRect.height;
                     const scale = Math.min(scaleX, scaleY, 1) * 0.95;
                     
                     panzoomInstance.zoomAbs(0, 0, scale);
                     currentZoom = scale;
-                    window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
+                    window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom, renderGen: window._renderGen }});
                     
                     // Reveal diagram (it may have been hidden to prevent flash during re-render)
                     diagram.style.opacity = '1';
@@ -1882,12 +1894,18 @@ Console.WriteLine(""Hello, World!"");
             diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
             diagram.classList.remove('has-error');
             // Detect diagram types that adapt to container width.
-            // These need viewport-width containers; 2000px would create oversized canvas.
             var isArch = /^\s*architecture/m.test(newCode);
             var isGantt = /^\s*gantt/m.test(newCode);
             var isZenUML = /^\s*zenuml/m.test(newCode);
-            var usesContainerWidth = isArch || isGantt || isZenUML;
-            diagram.style.minWidth = usesContainerWidth ? ((window.innerWidth - 60) + 'px') : '2000px';
+            // Architecture and ZenUML use viewport-width containers so they lay out nicely.
+            // Gantt needs a LARGE container so it doesn't scrunch dates/bars — it grows
+            // horizontally with task count and date range, so give it plenty of room.
+            // Panzoom handles navigation for content wider than the viewport.
+            var usesContainerWidth = isArch || isZenUML;
+            var minW = usesContainerWidth ? ((window.innerWidth - 60) + 'px')
+                     : isGantt ? (Math.max(window.innerWidth - 60, 2000) + 'px')
+                     : '2000px';
+            diagram.style.minWidth = minW;
             diagram.style.width = '';
             
             // Reset any transform on diagram before re-rendering
@@ -1949,12 +1967,12 @@ Console.WriteLine(""Hello, World!"");
                                 // We run AFTER Mermaid, so our inline styles win.
                                 svg.style.maxWidth = 'none';
                                 
-                                if (usesContainerWidth) {{
-                                    // Gantt/architecture/ZenUML lay out based on container width.
-                                    // Keep the viewport-width minWidth so the layout isn't collapsed.
-                                    // Only set height from getBBox; width stays as rendered.
-                                    svg.style.height = svgHeight + 'px';
-                                    svg.style.minHeight = svgHeight + 'px';
+                                    if (usesContainerWidth || isGantt) {{
+                                        // Architecture/ZenUML/Gantt lay out based on container width.
+                                        // Keep the container minWidth so the layout isn't collapsed.
+                                        // Only set height from getBBox; width stays as rendered.
+                                        svg.style.height = svgHeight + 'px';
+                                        svg.style.minHeight = svgHeight + 'px';
                                 }} else {{
                                     // Force SVG to content size (overrides Mermaid's inline styles).
                                     svg.style.width = svgWidth + 'px';
@@ -1986,7 +2004,7 @@ Console.WriteLine(""Hello, World!"");
                             // Register zoom handler FIRST (before any zoom calls)
                             window.panzoomInstance.on('zoom', function(e) {{
                                 window.currentZoom = e.getTransform().scale;
-                                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
+                                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom, renderGen: window._renderGen }});
                             }});
                             
                             // Restore zoom level (fitToWindow is handled by C# after diagramReady)
@@ -2045,7 +2063,7 @@ Console.WriteLine(""Hello, World!"");
                             // Register zoom handler FIRST (before any zoom calls)
                             window.panzoomInstance.on('zoom', function(e) {{
                                 window.currentZoom = e.getTransform().scale;
-                                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
+                                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom, renderGen: window._renderGen }});
                             }});
                             if (!fitAfterRender) {{
                                 window.panzoomInstance.zoomAbs(0, 0, savedZoom);
@@ -2589,13 +2607,19 @@ Console.WriteLine(""Hello, World!"");
                 
                 if (messageType == "zoom" && message.RootElement.TryGetProperty("level", out var levelElement))
                 {
-                    _currentZoom = levelElement.GetDouble();
-                    // Don't update _activeDocument.PreviewZoom here — postMessage is async,
-                    // so stale zoom events from the previous tab's panzoom can arrive after
-                    // _activeDocument has switched to a new document, corrupting its zoom.
-                    // PreviewZoom is saved at well-defined sync points: SwitchToDocument,
-                    // SaveActiveDocumentState, ResetZoom, ZoomSlider, ApplyZoom.
-                    UpdateZoomUI();
+                    // Only process zoom events from the current render generation.
+                    // Stale events from a previous tab's panzoom carry an old renderGen
+                    // and would corrupt the current document's zoom level.
+                    var eventGen = message.RootElement.TryGetProperty("renderGen", out var genElement) ? genElement.GetInt32() : -1;
+                    if (eventGen == _expectedRenderGen)
+                    {
+                        _currentZoom = levelElement.GetDouble();
+                        if (_activeDocument != null)
+                        {
+                            _activeDocument.PreviewZoom = _currentZoom;
+                        }
+                        UpdateZoomUI();
+                    }
                 }
                 else if (messageType == "pngExport" && message.RootElement.TryGetProperty("data", out var dataElement))
                 {
