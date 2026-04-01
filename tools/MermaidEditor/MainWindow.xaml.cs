@@ -2621,10 +2621,11 @@ Console.WriteLine(""Hello, World!"");
                     if (eventGen == _expectedRenderGen)
                     {
                         _currentZoom = levelElement.GetDouble();
-                        if (_activeDocument != null)
-                        {
-                            _activeDocument.PreviewZoom = _currentZoom;
-                        }
+                        // Don't update _activeDocument.PreviewZoom here — postMessage is async
+                        // and during tab switches, _activeDocument may have already changed to
+                        // the new document while zoom events from the old render are still arriving.
+                        // PreviewZoom is saved at well-defined sync points: SwitchToDocument,
+                        // SaveActiveDocumentState, ResetZoom, ZoomSlider, ApplyZoom.
                         UpdateZoomUI();
                     }
                 }
