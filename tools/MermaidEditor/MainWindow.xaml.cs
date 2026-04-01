@@ -1506,12 +1506,9 @@ Console.WriteLine(""Hello, World!"");
         #diagram svg {{
             display: block;
         }}
-        /* Override Mermaid's huge inline width styles ONLY for gantt charts */
-        #diagram svg[aria-roledescription=""gantt""] {{
-            width: auto !important;
-            min-width: auto !important;
-            max-width: none !important;
-        }}
+        /* Mermaid inline width/max-width styles are overridden by our JS
+           sizing logic after render (getBBox measurement). No CSS !important
+           overrides needed. */
         .error {{
             color: {errorColor};
             padding: 20px;
@@ -1942,18 +1939,9 @@ Console.WriteLine(""Hello, World!"");
                             }}
                             
                             if (svgWidth > 0 && svgHeight > 0) {{
-                                // Clear any Mermaid-set attributes/styles that conflict with our sizing.
-                                // Mermaid may set width/height attributes, max-width style, etc.
-                                svg.removeAttribute('max-width');
-                                svg.removeAttribute('width');
-                                svg.removeAttribute('height');
+                                // Override Mermaid's inline styles that conflict with our sizing.
+                                // We run AFTER Mermaid, so our inline styles win.
                                 svg.style.maxWidth = 'none';
-                                
-                                // Crop the viewBox to match actual content bounds (with padding).
-                                // Mermaid often sets viewBox larger than the content, causing empty
-                                // space in the rendered SVG even when width/height are correct.
-                                svg.setAttribute('viewBox', 
-                                    (bboxX - 20) + ' ' + (bboxY - 20) + ' ' + svgWidth + ' ' + svgHeight);
                                 
                                 if (isArch) {{
                                     // Architecture diagrams lay out based on container width.
@@ -1962,11 +1950,13 @@ Console.WriteLine(""Hello, World!"");
                                     svg.style.height = svgHeight + 'px';
                                     svg.style.minHeight = svgHeight + 'px';
                                 }} else {{
+                                    // Force SVG to content size (overrides Mermaid's inline styles).
                                     svg.style.width = svgWidth + 'px';
                                     svg.style.height = svgHeight + 'px';
                                     svg.style.minWidth = svgWidth + 'px';
                                     svg.style.minHeight = svgHeight + 'px';
                                     
+                                    // Shrink diagram card to fit the SVG content
                                     diagram.style.minWidth = 'auto';
                                     diagram.style.width = 'auto';
                                 }}
@@ -2033,11 +2023,18 @@ Console.WriteLine(""Hello, World!"");
                                 return;
                             }}
                             
-                            // Measure actual content dimensions while container is still wide (2000px)
+                            // Temporarily shrink the container so the DOM content
+                            // takes its natural (intrinsic) width instead of stretching
+                            // to fill the 2000px rendering container.
+                            diagram.style.minWidth = '0';
+                            diagram.style.width = 'fit-content';
+                            // Force reflow so the browser recalculates layout
+                            diagram.offsetWidth;
+                            
                             var contentWidth = contentEl.scrollWidth || contentEl.offsetWidth;
                             var contentHeight = contentEl.scrollHeight || contentEl.offsetHeight;
                             
-                            // Shrink diagram to fit content (add padding for breathing room)
+                            // Set diagram card to the measured content size
                             if (contentWidth > 0) {{
                                 diagram.style.minWidth = (contentWidth + 20) + 'px';
                                 diagram.style.width = (contentWidth + 20) + 'px';
@@ -8184,12 +8181,9 @@ Console.WriteLine(""Hello, World!"");
         #diagram svg {{
             display: block;
         }}
-        /* Override Mermaid's huge inline width styles ONLY for gantt charts */
-        #diagram svg[aria-roledescription=""gantt""] {{
-            width: auto !important;
-            min-width: auto !important;
-            max-width: none !important;
-        }}
+        /* Mermaid inline width/max-width styles are overridden by our JS
+           sizing logic after render (getBBox measurement). No CSS !important
+           overrides needed. */
     </style>
 </head>
 <body>
@@ -8219,32 +8213,16 @@ Console.WriteLine(""Hello, World!"");
             // Auto-size the container to fit the actual SVG content
             if (svg) {{
                 try {{
-                    // Actually remove Mermaid's inline width/min-width styles using removeProperty
-                    // Setting to '' doesn't work - must use removeProperty to truly remove inline styles
-                    svg.style.removeProperty('width');
-                    svg.style.removeProperty('min-width');
-                    svg.style.removeProperty('max-width');
-                    svg.style.removeProperty('height');
-                    svg.style.removeProperty('min-height');
-                    
-                    // Get dimensions from viewBox if available (more reliable for gantt charts)
-                    const viewBox = svg.getAttribute('viewBox');
-                    if (viewBox) {{
-                        const parts = viewBox.split(' ').map(Number);
-                        if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {{
-                            const padding = 20;
-                            svg.setAttribute('width', parts[2] + padding);
-                            svg.setAttribute('height', parts[3] + padding);
-                        }}
-                    }} else {{
-                        // Fall back to getBBox for diagrams without viewBox
-                        const bbox = svg.getBBox();
-                        if (bbox && bbox.width > 0 && bbox.height > 0) {{
-                            const padding = 20;
-                            svg.setAttribute('width', bbox.width + padding);
-                            svg.setAttribute('height', bbox.height + padding);
-                            svg.setAttribute('viewBox', `${{bbox.x - padding/2}} ${{bbox.y - padding/2}} ${{bbox.width + padding}} ${{bbox.height + padding}}`);
-                        }}
+                    const bbox = svg.getBBox();
+                    if (bbox && bbox.width > 0 && bbox.height > 0) {{
+                        const svgW = bbox.width + 40;
+                        const svgH = bbox.height + 40;
+                        // Override Mermaid's inline styles with content-based sizes
+                        svg.style.maxWidth = 'none';
+                        svg.style.width = svgW + 'px';
+                        svg.style.height = svgH + 'px';
+                        svg.style.minWidth = svgW + 'px';
+                        svg.style.minHeight = svgH + 'px';
                     }}
                 }} catch (e) {{
                     // getBBox may fail in some cases, just continue
