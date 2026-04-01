@@ -1752,6 +1752,9 @@ Console.WriteLine(""Hello, World!"");
                     panzoomInstance.zoomAbs(0, 0, scale);
                     currentZoom = scale;
                     window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
+                    
+                    // Reveal diagram (it may have been hidden to prevent flash during re-render)
+                    diagram.style.opacity = '1';
                 }}, 10);
             }}
         }};
@@ -1887,6 +1890,12 @@ Console.WriteLine(""Hello, World!"");
             // Reset any transform on diagram before re-rendering
             diagram.style.transform = '';
             
+            // Hide diagram during render when fit-to-window will be re-applied
+            // to prevent flash of incorrect zoom level before fitToWindow runs
+            if (fitAfterRender) {{
+                diagram.style.opacity = '0';
+            }}
+            
             // Destroy old panzoom instance
             if (window.panzoomInstance) {{
                 window.panzoomInstance.dispose();
@@ -1959,11 +1968,8 @@ Console.WriteLine(""Hello, World!"");
                                 boundsPadding: 0.1
                             }});
                             
-                            // Restore zoom level (or fit to window if requested)
-                            if (fitAfterRender) {{
-                                // Re-calculate fit-to-window for this newly rendered diagram
-                                window.fitToWindow();
-                            }} else {{
+                            // Restore zoom level (fitToWindow is handled by C# after diagramReady)
+                            if (!fitAfterRender) {{
                                 window.panzoomInstance.zoomAbs(0, 0, savedZoom);
                                 window.currentZoom = savedZoom;
                             }}
@@ -1983,7 +1989,8 @@ Console.WriteLine(""Hello, World!"");
                                     targetScrollLeft: savedScrollLeft, 
                                     targetScrollTop: savedScrollTop,
                                     targetPanX: savedPanX,
-                                    targetPanY: savedPanY
+                                    targetPanY: savedPanY,
+                                    fitAfterRender: !!fitAfterRender
                                 }});
                             }}, 50);
                             
@@ -2028,9 +2035,7 @@ Console.WriteLine(""Hello, World!"");
                                 bounds: false,
                                 boundsPadding: 0.1
                             }});
-                            if (fitAfterRender) {{
-                                window.fitToWindow();
-                            }} else {{
+                            if (!fitAfterRender) {{
                                 window.panzoomInstance.zoomAbs(0, 0, savedZoom);
                                 window.currentZoom = savedZoom;
                             }}
@@ -2044,7 +2049,8 @@ Console.WriteLine(""Hello, World!"");
                                     targetScrollLeft: savedScrollLeft, 
                                     targetScrollTop: savedScrollTop,
                                     targetPanX: savedPanX,
-                                    targetPanY: savedPanY
+                                    targetPanY: savedPanY,
+                                    fitAfterRender: !!fitAfterRender
                                 }});
                             }}, 50);
                             window.panzoomInstance.on('zoom', function(e) {{
@@ -2615,6 +2621,15 @@ Console.WriteLine(""Hello, World!"");
                     if (scrollLeft > 0 || scrollTop > 0)
                     {
                         _ = RestorePreviewScrollPositionAsync(scrollLeft, scrollTop);
+                    }
+                    
+                    // If fitAfterRender was requested, call fitToWindow now that the diagram is fully rendered.
+                    // This is done from C# (not from JS inside updateDiagram) to ensure the diagram layout
+                    // is fully settled before measuring dimensions for the fit calculation.
+                    var shouldFit = message.RootElement.TryGetProperty("fitAfterRender", out var fitEl) && fitEl.GetBoolean();
+                    if (shouldFit && _webViewInitialized)
+                    {
+                        _ = PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.fitToWindow()");
                     }
                 }
                 else if (messageType == "markdownReady")
