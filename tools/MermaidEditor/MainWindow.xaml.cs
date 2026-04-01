@@ -1937,7 +1937,12 @@ Console.WriteLine(""Hello, World!"");
                             }}
                             
                             if (svgWidth > 0 && svgHeight > 0) {{
+                                // Clear any Mermaid-set attributes/styles that conflict with our sizing.
+                                // Mermaid may set width/height attributes, max-width style, etc.
                                 svg.removeAttribute('max-width');
+                                svg.removeAttribute('width');
+                                svg.removeAttribute('height');
+                                svg.style.maxWidth = 'none';
                                 
                                 if (isArch) {{
                                     // Architecture diagrams lay out based on container width.
@@ -1954,6 +1959,9 @@ Console.WriteLine(""Hello, World!"");
                                     diagram.style.minWidth = 'auto';
                                     diagram.style.width = 'auto';
                                 }}
+                                
+                                // Force reflow so diagram div shrinks before panzoom captures its size
+                                diagram.offsetWidth;
                             }}
                             
                             // Set up click handlers
