@@ -1928,14 +1928,23 @@ Console.WriteLine(""Hello, World!"");
                             }}
                             
                             if (svgWidth > 0 && svgHeight > 0) {{
-                                svg.style.width = svgWidth + 'px';
-                                svg.style.height = svgHeight + 'px';
-                                svg.style.minWidth = svgWidth + 'px';
-                                svg.style.minHeight = svgHeight + 'px';
                                 svg.removeAttribute('max-width');
                                 
-                                diagram.style.minWidth = 'auto';
-                                diagram.style.width = 'auto';
+                                if (isArch) {{
+                                    // Architecture diagrams lay out based on container width.
+                                    // Keep the viewport-width minWidth so the layout isn't collapsed.
+                                    // Only set height from getBBox; width stays as rendered.
+                                    svg.style.height = svgHeight + 'px';
+                                    svg.style.minHeight = svgHeight + 'px';
+                                }} else {{
+                                    svg.style.width = svgWidth + 'px';
+                                    svg.style.height = svgHeight + 'px';
+                                    svg.style.minWidth = svgWidth + 'px';
+                                    svg.style.minHeight = svgHeight + 'px';
+                                    
+                                    diagram.style.minWidth = 'auto';
+                                    diagram.style.width = 'auto';
+                                }}
                             }}
                             
                             // Set up click handlers
