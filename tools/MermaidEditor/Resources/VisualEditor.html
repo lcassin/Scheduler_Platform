@@ -1395,6 +1395,8 @@
                     showJourneyContextMenu(e);
                 } else if (currentDiagramType === 'quadrant' && quadrantModel) {
                     showQuadrantContextMenu(e);
+                } else if (currentDiagramType === 'gitGraph' && gitGraphModel) {
+                    showGitGraphContextMenu(e);
                 } else {
                     // For class/state/ER, just suppress the browser menu
                     // (their context menus are handled on-SVG only)
@@ -1417,6 +1419,12 @@
                 const editorCanvas = document.getElementById('editorCanvas');
                 if (editorCanvas && editorCanvas.contains(e.target)) {
                     showQuadrantContextMenu(e);
+                }
+            }
+            else if (currentDiagramType === 'gitGraph' && gitGraphModel) {
+                const editorCanvas = document.getElementById('editorCanvas');
+                if (editorCanvas && editorCanvas.contains(e.target)) {
+                    showGitGraphContextMenu(e);
                 }
             }
         });
@@ -2614,7 +2622,7 @@
         // Note: mindmap now uses the flowchart infrastructure (panzoom SVG).
 
         function _isEditorCanvasDiagram() {
-            return currentDiagramType === 'gantt' || currentDiagramType === 'pie' || currentDiagramType === 'timeline' || currentDiagramType === 'journey' || currentDiagramType === 'quadrant';
+            return currentDiagramType === 'gantt' || currentDiagramType === 'pie' || currentDiagramType === 'timeline' || currentDiagramType === 'journey' || currentDiagramType === 'quadrant' || currentDiagramType === 'gitGraph';
         }
 
         function _getEditorCanvasSvg() {
@@ -4813,7 +4821,7 @@
                 if (e.button !== 0) return;
                 // Don't pan if clicking on a button or interactive SVG element
                 const tag = e.target.tagName.toLowerCase();
-                if (tag === 'button' || e.target.closest('foreignObject') || e.target.closest('[onclick]') || e.target.closest('[data-action]') || e.target.closest('[data-qc-type]') || e.target.closest('[data-tl-type]') || e.target.closest('[data-jn-type]')) return;
+                if (tag === 'button' || e.target.closest('foreignObject') || e.target.closest('[onclick]') || e.target.closest('[data-action]') || e.target.closest('[data-qc-type]') || e.target.closest('[data-tl-type]') || e.target.closest('[data-jn-type]') || e.target.closest('[data-gg-index]')) return;
                 isPanning = true;
                 panStartX = e.clientX;
                 panStartY = e.clientY;

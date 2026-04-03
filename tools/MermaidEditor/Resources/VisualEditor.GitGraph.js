@@ -668,11 +668,11 @@ function _ggBuildPositionHtml(cmdCount) {
         options.push(`Before command ${i + 1}`);
     }
     if (options.length <= 1) return '';
-    let html = '<label style="font-size:12px;opacity:0.7">Position:</label><select id="gg-position" style="width:100%;padding:4px;margin-top:2px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">';
+    let html = '<div class="property-row"><div class="property-label">Position</div><select class="property-select" id="gg-position">';
     options.forEach((opt, i) => {
         html += `<option value="${i}">${opt}</option>`;
     });
-    html += '</select>';
+    html += '</select></div>';
     return html;
 }
 
@@ -689,78 +689,68 @@ function createGitGraphCommand(type) {
     const branches = _ggGetExistingBranches();
     const cmdCount = (gitGraphModel.commands || []).length;
 
-    const body = document.getElementById('dialog-body');
-    if (!body) return;
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = `Add ${type}`;
+    const body = document.querySelector('.property-panel-body');
 
     let fieldsHtml = '';
     if (type === 'commit') {
         fieldsHtml = `
-            <label>Commit ID (optional):</label>
-            <input id="gg-id" type="text" placeholder="e.g. feat-123" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />
-            <label>Tag (optional):</label>
-            <input id="gg-tag" type="text" placeholder="e.g. v1.0" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />
-            <label>Type:</label>
-            <select id="gg-type" style="width:100%;padding:4px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">
+            <div class="property-row"><div class="property-label">Commit ID (optional)</div>
+            <input class="property-input" id="gg-id" placeholder="e.g. feat-123" /></div>
+            <div class="property-row"><div class="property-label">Tag (optional)</div>
+            <input class="property-input" id="gg-tag" placeholder="e.g. v1.0" /></div>
+            <div class="property-row"><div class="property-label">Type</div>
+            <select class="property-select" id="gg-type">
                 <option value="NORMAL">Normal</option>
                 <option value="REVERSE">Reverse</option>
                 <option value="HIGHLIGHT">Highlight</option>
-            </select>`;
+            </select></div>`;
     } else if (type === 'branch') {
         fieldsHtml = `
-            <label>Branch Name:</label>
-            <input id="gg-branch" type="text" placeholder="e.g. feature-x" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />
-            <label>Order (optional):</label>
-            <input id="gg-order" type="number" placeholder="" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />`;
+            <div class="property-row"><div class="property-label">Branch Name</div>
+            <input class="property-input" id="gg-branch" placeholder="e.g. feature-x" /></div>
+            <div class="property-row"><div class="property-label">Order (optional)</div>
+            <input class="property-input" id="gg-order" type="number" /></div>`;
     } else if (type === 'checkout') {
         let branchOpts = branches.map(b => `<option value="${b}">${b}</option>`).join('');
         fieldsHtml = `
-            <label>Switch to Branch:</label>
-            <select id="gg-branch" style="width:100%;padding:4px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">
-                ${branchOpts}
-            </select>`;
+            <div class="property-row"><div class="property-label">Switch to Branch</div>
+            <select class="property-select" id="gg-branch">${branchOpts}</select></div>`;
     } else if (type === 'merge') {
         let branchOpts = branches.map(b => `<option value="${b}">${b}</option>`).join('');
         fieldsHtml = `
-            <label>Merge from Branch:</label>
-            <select id="gg-branch" style="width:100%;padding:4px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">
-                ${branchOpts}
-            </select>
-            <label>Commit ID (optional):</label>
-            <input id="gg-id" type="text" placeholder="" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />
-            <label>Tag (optional):</label>
-            <input id="gg-tag" type="text" placeholder="" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />
-            <label>Type:</label>
-            <select id="gg-type" style="width:100%;padding:4px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">
+            <div class="property-row"><div class="property-label">Merge from Branch</div>
+            <select class="property-select" id="gg-branch">${branchOpts}</select></div>
+            <div class="property-row"><div class="property-label">Commit ID (optional)</div>
+            <input class="property-input" id="gg-id" /></div>
+            <div class="property-row"><div class="property-label">Tag (optional)</div>
+            <input class="property-input" id="gg-tag" /></div>
+            <div class="property-row"><div class="property-label">Type</div>
+            <select class="property-select" id="gg-type">
                 <option value="NORMAL">Normal</option>
                 <option value="REVERSE">Reverse</option>
                 <option value="HIGHLIGHT">Highlight</option>
-            </select>`;
+            </select></div>`;
     } else if (type === 'cherry-pick') {
         fieldsHtml = `
-            <label>Commit ID to cherry-pick:</label>
-            <input id="gg-id" type="text" placeholder="e.g. feat-123" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />
-            <label>Parent (optional):</label>
-            <input id="gg-parent" type="text" placeholder="" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />
-            <label>Tag (optional):</label>
-            <input id="gg-tag" type="text" placeholder="" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />`;
+            <div class="property-row"><div class="property-label">Commit ID to cherry-pick</div>
+            <input class="property-input" id="gg-id" placeholder="e.g. feat-123" /></div>
+            <div class="property-row"><div class="property-label">Parent (optional)</div>
+            <input class="property-input" id="gg-parent" /></div>
+            <div class="property-row"><div class="property-label">Tag (optional)</div>
+            <input class="property-input" id="gg-tag" /></div>`;
     }
 
     body.innerHTML = `
-        <div style="margin-bottom:12px">
-            <h3 style="margin:0 0 12px">Add ${type}</h3>
-            ${fieldsHtml}
-            ${_ggBuildPositionHtml(cmdCount)}
+        ${fieldsHtml}
+        ${_ggBuildPositionHtml(cmdCount)}
+        <div class="property-row" style="margin-top:8px">
+            <button id="gg-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Add ${type}</button>
         </div>`;
 
-    document.getElementById('dialog-title').textContent = `Add ${type}`;
-    const dialog = document.getElementById('editor-dialog');
-    dialog.style.display = 'flex';
-
-    const confirmBtn = document.getElementById('dialog-confirm');
-    const cancelBtn = document.getElementById('dialog-cancel');
-
-    const onConfirm = () => {
-        cleanup();
+    document.getElementById('gg-dlg-ok').addEventListener('click', function() {
         const msg = { type: 'gg_commandCreated', commandType: type };
         const insertIdx = _ggReadInsertIndex();
         if (insertIdx !== null) msg.insertAtIndex = insertIdx;
@@ -799,22 +789,12 @@ function createGitGraphCommand(type) {
         }
 
         window.chrome.webview.postMessage(msg);
-    };
-
-    const cleanup = () => {
-        dialog.style.display = 'none';
-        confirmBtn.removeEventListener('click', onConfirm);
-        cancelBtn.removeEventListener('click', onCancel);
-    };
-    const onCancel = () => cleanup();
-
-    confirmBtn.addEventListener('click', onConfirm);
-    cancelBtn.addEventListener('click', onCancel);
-
-    // Focus first input
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
     setTimeout(() => {
         const firstInput = body.querySelector('input');
-        if (firstInput) firstInput.focus();
+        if (firstInput) firstInput.select();
     }, 50);
 }
 
@@ -824,66 +804,58 @@ function editGitGraphCommand(index) {
     if (!cmd) return;
 
     const branches = _ggGetExistingBranches();
-    const body = document.getElementById('dialog-body');
-    if (!body) return;
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = `Edit ${cmd.type}`;
+    const body = document.querySelector('.property-panel-body');
 
     let fieldsHtml = '';
     if (cmd.type === 'commit' || cmd.type === 'merge' || cmd.type === 'cherry-pick') {
         fieldsHtml += `
-            <label>ID:</label>
-            <input id="gg-id" type="text" value="${cmd.id || ''}" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />
-            <label>Tag:</label>
-            <input id="gg-tag" type="text" value="${cmd.tag || ''}" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />`;
+            <div class="property-row"><div class="property-label">ID</div>
+            <input class="property-input" id="gg-id" value="${cmd.id || ''}" /></div>
+            <div class="property-row"><div class="property-label">Tag</div>
+            <input class="property-input" id="gg-tag" value="${cmd.tag || ''}" /></div>`;
     }
     if (cmd.type === 'commit' || cmd.type === 'merge') {
         fieldsHtml += `
-            <label>Type:</label>
-            <select id="gg-type" style="width:100%;padding:4px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">
+            <div class="property-row"><div class="property-label">Type</div>
+            <select class="property-select" id="gg-type">
                 <option value="NORMAL" ${(cmd.commitType || 'NORMAL') === 'NORMAL' ? 'selected' : ''}>Normal</option>
                 <option value="REVERSE" ${cmd.commitType === 'REVERSE' ? 'selected' : ''}>Reverse</option>
                 <option value="HIGHLIGHT" ${cmd.commitType === 'HIGHLIGHT' ? 'selected' : ''}>Highlight</option>
-            </select>`;
+            </select></div>`;
     }
     if (cmd.type === 'branch' || cmd.type === 'checkout' || cmd.type === 'merge') {
         if (cmd.type === 'checkout' || cmd.type === 'merge') {
             let branchOpts = branches.map(b => `<option value="${b}" ${b === cmd.branchName ? 'selected' : ''}>${b}</option>`).join('');
             fieldsHtml += `
-                <label>Branch:</label>
-                <select id="gg-branch" style="width:100%;padding:4px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">
-                    ${branchOpts}
-                </select>`;
+                <div class="property-row"><div class="property-label">Branch</div>
+                <select class="property-select" id="gg-branch">${branchOpts}</select></div>`;
         } else {
             fieldsHtml += `
-                <label>Branch Name:</label>
-                <input id="gg-branch" type="text" value="${cmd.branchName || ''}" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />`;
+                <div class="property-row"><div class="property-label">Branch Name</div>
+                <input class="property-input" id="gg-branch" value="${cmd.branchName || ''}" /></div>`;
         }
     }
     if (cmd.type === 'branch') {
         fieldsHtml += `
-            <label>Order (optional):</label>
-            <input id="gg-order" type="number" value="${cmd.order != null ? cmd.order : ''}" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />`;
+            <div class="property-row"><div class="property-label">Order (optional)</div>
+            <input class="property-input" id="gg-order" type="number" value="${cmd.order != null ? cmd.order : ''}" /></div>`;
     }
     if (cmd.type === 'cherry-pick') {
         fieldsHtml += `
-            <label>Parent:</label>
-            <input id="gg-parent" type="text" value="${cmd.parent || ''}" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />`;
+            <div class="property-row"><div class="property-label">Parent</div>
+            <input class="property-input" id="gg-parent" value="${cmd.parent || ''}" /></div>`;
     }
 
     body.innerHTML = `
-        <div style="margin-bottom:12px">
-            <h3 style="margin:0 0 12px">Edit ${cmd.type} (command ${index + 1})</h3>
-            ${fieldsHtml}
+        ${fieldsHtml}
+        <div class="property-row" style="margin-top:8px">
+            <button id="gg-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
         </div>`;
 
-    document.getElementById('dialog-title').textContent = `Edit ${cmd.type}`;
-    const dialog = document.getElementById('editor-dialog');
-    dialog.style.display = 'flex';
-
-    const confirmBtn = document.getElementById('dialog-confirm');
-    const cancelBtn = document.getElementById('dialog-cancel');
-
-    const onConfirm = () => {
-        cleanup();
+    document.getElementById('gg-dlg-ok').addEventListener('click', function() {
         const msg = { type: 'gg_commandEdited', index: index };
 
         if (cmd.type === 'commit' || cmd.type === 'merge' || cmd.type === 'cherry-pick') {
@@ -909,21 +881,12 @@ function editGitGraphCommand(index) {
         }
 
         window.chrome.webview.postMessage(msg);
-    };
-
-    const cleanup = () => {
-        dialog.style.display = 'none';
-        confirmBtn.removeEventListener('click', onConfirm);
-        cancelBtn.removeEventListener('click', onCancel);
-    };
-    const onCancel = () => cleanup();
-
-    confirmBtn.addEventListener('click', onConfirm);
-    cancelBtn.addEventListener('click', onCancel);
-
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
     setTimeout(() => {
         const firstInput = body.querySelector('input');
-        if (firstInput) firstInput.focus();
+        if (firstInput) firstInput.select();
     }, 50);
 }
 
@@ -932,67 +895,51 @@ function deleteGitGraphCommand(index) {
     const cmd = gitGraphModel.commands[index];
     if (!cmd) return;
 
-    const body = document.getElementById('dialog-body');
-    if (!body) return;
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Delete Command';
+    const body = document.querySelector('.property-panel-body');
 
     const label = _ggFormatCommandLabel(cmd);
     body.innerHTML = `
-        <div style="margin-bottom:12px">
-            <p>Delete command ${index + 1}?</p>
-            <p style="font-family:monospace;font-size:12px;opacity:0.7;padding:8px;background:var(--input-bg);border-radius:4px">${label}</p>
+        <div class="property-row">
+            <p style="margin:0">Delete command ${index + 1}?</p>
+            <p style="font-family:monospace;font-size:12px;opacity:0.7;padding:8px;margin:8px 0;background:var(--input-bg);border-radius:4px">${label}</p>
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="gg-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:#d32f2f;color:#fff;border:none;border-radius:4px">Delete</button>
         </div>`;
 
-    document.getElementById('dialog-title').textContent = 'Delete Command';
-    const dialog = document.getElementById('editor-dialog');
-    dialog.style.display = 'flex';
-
-    const confirmBtn = document.getElementById('dialog-confirm');
-    const cancelBtn = document.getElementById('dialog-cancel');
-
-    const onConfirm = () => {
-        cleanup();
+    document.getElementById('gg-dlg-ok').addEventListener('click', function() {
         window.chrome.webview.postMessage({ type: 'gg_commandDeleted', index: index });
-    };
-
-    const cleanup = () => {
-        dialog.style.display = 'none';
-        confirmBtn.removeEventListener('click', onConfirm);
-        cancelBtn.removeEventListener('click', onCancel);
-    };
-    const onCancel = () => cleanup();
-
-    confirmBtn.addEventListener('click', onConfirm);
-    cancelBtn.addEventListener('click', onCancel);
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
 }
 
 function editGitGraphSettings() {
     if (!gitGraphModel) return;
 
-    const body = document.getElementById('dialog-body');
-    if (!body) return;
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'GitGraph Settings';
+    const body = document.querySelector('.property-panel-body');
 
     body.innerHTML = `
-        <div style="margin-bottom:12px">
-            <label>Title (optional):</label>
-            <input id="gg-title" type="text" value="${gitGraphModel.title || ''}" style="width:100%;padding:6px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px" />
-            <label>Orientation:</label>
-            <select id="gg-orientation" style="width:100%;padding:4px;margin:4px 0 8px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">
-                <option value="" ${!gitGraphModel.orientation ? 'selected' : ''}>Default (TB - Top to Bottom)</option>
-                <option value="LR" ${gitGraphModel.orientation === 'LR' ? 'selected' : ''}>LR - Left to Right</option>
-                <option value="TB" ${gitGraphModel.orientation === 'TB' ? 'selected' : ''}>TB - Top to Bottom</option>
-                <option value="BT" ${gitGraphModel.orientation === 'BT' ? 'selected' : ''}>BT - Bottom to Top</option>
-            </select>
+        <div class="property-row"><div class="property-label">Title (optional)</div>
+        <input class="property-input" id="gg-title" value="${gitGraphModel.title || ''}" /></div>
+        <div class="property-row"><div class="property-label">Orientation</div>
+        <select class="property-select" id="gg-orientation">
+            <option value="" ${!gitGraphModel.orientation ? 'selected' : ''}>Default (TB - Top to Bottom)</option>
+            <option value="LR" ${gitGraphModel.orientation === 'LR' ? 'selected' : ''}>LR - Left to Right</option>
+            <option value="TB" ${gitGraphModel.orientation === 'TB' ? 'selected' : ''}>TB - Top to Bottom</option>
+            <option value="BT" ${gitGraphModel.orientation === 'BT' ? 'selected' : ''}>BT - Bottom to Top</option>
+        </select></div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="gg-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save Settings</button>
         </div>`;
 
-    document.getElementById('dialog-title').textContent = 'GitGraph Settings';
-    const dialog = document.getElementById('editor-dialog');
-    dialog.style.display = 'flex';
-
-    const confirmBtn = document.getElementById('dialog-confirm');
-    const cancelBtn = document.getElementById('dialog-cancel');
-
-    const onConfirm = () => {
-        cleanup();
+    document.getElementById('gg-dlg-ok').addEventListener('click', function() {
         const title = document.getElementById('gg-title')?.value.trim();
         const orientation = document.getElementById('gg-orientation')?.value || null;
         window.chrome.webview.postMessage({
@@ -1000,19 +947,10 @@ function editGitGraphSettings() {
             title: title || null,
             orientation: orientation || null
         });
-    };
-
-    const cleanup = () => {
-        dialog.style.display = 'none';
-        confirmBtn.removeEventListener('click', onConfirm);
-        cancelBtn.removeEventListener('click', onCancel);
-    };
-    const onCancel = () => cleanup();
-
-    confirmBtn.addEventListener('click', onConfirm);
-    cancelBtn.addEventListener('click', onCancel);
-
-    setTimeout(() => document.getElementById('gg-title')?.focus(), 50);
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('gg-title')?.select(), 50);
 }
 
 // ========== GitGraph Copy/Paste ==========
