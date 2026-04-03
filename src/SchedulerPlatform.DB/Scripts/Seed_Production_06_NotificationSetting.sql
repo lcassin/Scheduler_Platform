@@ -55,6 +55,7 @@ FROM [dbo].[NotificationSetting] ns
     INNER JOIN [dbo].[Schedule] s ON ns.[ScheduleId] = s.[ScheduleId]
 WHERE ns.[IsDeleted] = 0
     AND s.[IsDeleted] = 0
+    AND s.[IsSystemSchedule] = 0  -- Exclude system schedules (auto-created on startup, IDs may differ in Production)
 ORDER BY ns.[ScheduleId], ns.[NotificationSettingId];
 
 PRINT '';

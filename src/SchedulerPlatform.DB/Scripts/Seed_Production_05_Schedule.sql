@@ -93,7 +93,7 @@ PRINT '-- Quartz Job Details';
 PRINT '-- ============================================================================';
 
 -- Map JobType enum to .NET class names used by the application
--- JobType: 0=Process, 1=StoredProcedure, 2=ApiCall, 3=Maintenance
+-- JobType: 1=Process, 2=StoredProcedure, 3=ApiCall, 4=Maintenance
 SELECT
     'IF NOT EXISTS (SELECT 1 FROM [dbo].[QRTZ_JOB_DETAILS] WHERE [SCHED_NAME] = N''QuartzScheduler'' AND [JOB_NAME] = N''Job_' + CAST(s.[ScheduleId] AS NVARCHAR(20)) + ''' AND [JOB_GROUP] = N''Group_' + CAST(s.[ClientId] AS NVARCHAR(20)) + ''')' + CHAR(13) + CHAR(10) +
     'BEGIN' + CHAR(13) + CHAR(10) +
@@ -105,10 +105,10 @@ SELECT
         'NULL, ' +
         'N''' +
             CASE s.[JobType]
-                WHEN 0 THEN 'SchedulerPlatform.Jobs.Jobs.ProcessJob, SchedulerPlatform.Jobs'
-                WHEN 1 THEN 'SchedulerPlatform.Jobs.Jobs.StoredProcedureJob, SchedulerPlatform.Jobs'
-                WHEN 2 THEN 'SchedulerPlatform.Jobs.Jobs.ApiCallJob, SchedulerPlatform.Jobs'
-                WHEN 3 THEN 'SchedulerPlatform.Jobs.Jobs.MaintenanceJob, SchedulerPlatform.Jobs'
+                WHEN 1 THEN 'SchedulerPlatform.Jobs.Jobs.ProcessJob, SchedulerPlatform.Jobs'
+                WHEN 2 THEN 'SchedulerPlatform.Jobs.Jobs.StoredProcedureJob, SchedulerPlatform.Jobs'
+                WHEN 3 THEN 'SchedulerPlatform.Jobs.Jobs.ApiCallJob, SchedulerPlatform.Jobs'
+                WHEN 4 THEN 'SchedulerPlatform.Jobs.Jobs.MaintenanceJob, SchedulerPlatform.Jobs'
             END + ''', ' +
         '1, ' + -- IS_DURABLE (StoreDurably)
         '0, ' + -- IS_NONCONCURRENT
