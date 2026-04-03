@@ -163,7 +163,7 @@ function renderGitGraphDiagram() {
         hText.textContent = h.label;
         svg.appendChild(hText);
     });
-    currentY += 22;
+    currentY += 36;
 
     // Header separator
     const sep = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -535,7 +535,7 @@ function renderGitGraphDiagram() {
         // Branch name at top of lane
         const brLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         brLabel.setAttribute('x', laneX);
-        brLabel.setAttribute('y', currentY - 6);
+        brLabel.setAttribute('y', currentY - 10);
         brLabel.setAttribute('text-anchor', 'middle');
         brLabel.setAttribute('fill', laneColor);
         brLabel.setAttribute('font-size', '9');
@@ -663,15 +663,15 @@ function _ggGetActiveBranchAtIndex(index) {
 }
 
 function _ggBuildPositionHtml(cmdCount) {
-    const options = ['At end'];
-    for (let i = 0; i < cmdCount; i++) {
-        options.push(`Before command ${i + 1}`);
-    }
-    if (options.length <= 1) return '';
+    if (!gitGraphModel || !gitGraphModel.commands || cmdCount <= 0) return '';
+    const cmds = gitGraphModel.commands;
     let html = '<div class="property-row"><div class="property-label">Position</div><select class="property-select" id="gg-position">';
-    options.forEach((opt, i) => {
-        html += `<option value="${i}">${opt}</option>`;
-    });
+    html += '<option value="0">At end</option>';
+    for (let i = 0; i < cmdCount; i++) {
+        const desc = _ggFormatCommandLabel(cmds[i]);
+        const short = desc.length > 40 ? desc.substring(0, 39) + '\u2026' : desc;
+        html += `<option value="${i + 1}">Before: ${short}</option>`;
+    }
     html += '</select></div>';
     return html;
 }
@@ -981,19 +981,19 @@ function _ggPasteCommand(insertAtIndex) {
 
 // ========== GitGraph Context Menu ==========
 
-function _ggAddCtxItem(menu, label, action, isLight) {
+function _ggAddCtxItem(menu, label, action) {
     const item = document.createElement('div');
     item.textContent = label;
-    item.style.cssText = `padding:6px 16px;cursor:pointer;font-size:12px;white-space:nowrap`;
-    item.addEventListener('mouseenter', () => item.style.background = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.08)');
+    item.style.cssText = `padding:6px 16px;cursor:pointer;font-size:12px;white-space:nowrap;color:var(--context-menu-text)`;
+    item.addEventListener('mouseenter', () => item.style.background = 'var(--context-menu-hover)');
     item.addEventListener('mouseleave', () => item.style.background = 'transparent');
     item.addEventListener('click', (e) => { e.stopPropagation(); menu.remove(); action(); });
     menu.appendChild(item);
 }
 
-function _ggAddCtxSeparator(menu, isLight) {
+function _ggAddCtxSeparator(menu) {
     const sep = document.createElement('div');
-    sep.style.cssText = `height:1px;margin:4px 8px;background:${isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)'}`;
+    sep.style.cssText = `height:1px;margin:4px 8px;background:var(--context-menu-border)`;
     menu.appendChild(sep);
 }
 
@@ -1001,57 +1001,56 @@ function showGitGraphContextMenu(e) {
     e.preventDefault();
     document.querySelectorAll('.ve-context-menu').forEach(m => m.remove());
 
-    const isLight = document.body.classList.contains('theme-light');
     const target = e.target.closest('[data-gg-index]');
     const cmdIndex = target ? parseInt(target.getAttribute('data-gg-index')) : null;
 
     const menu = document.createElement('div');
     menu.className = 've-context-menu';
-    menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;background:${isLight ? '#fff' : '#2D2D30'};border:1px solid ${isLight ? '#ddd' : '#3E3E42'};border-radius:6px;padding:4px 0;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.3);min-width:160px`;
+    menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;background:var(--context-menu-bg);border:1px solid var(--context-menu-border);border-radius:6px;padding:4px 0;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.3);min-width:160px`;
 
     if (cmdIndex !== null && gitGraphModel && gitGraphModel.commands && gitGraphModel.commands[cmdIndex]) {
         const cmd = gitGraphModel.commands[cmdIndex];
-        _ggAddCtxItem(menu, `Edit ${cmd.type}...`, () => editGitGraphCommand(cmdIndex), isLight);
-        _ggAddCtxItem(menu, `Delete ${cmd.type}`, () => deleteGitGraphCommand(cmdIndex), isLight);
-        _ggAddCtxSeparator(menu, isLight);
-        _ggAddCtxItem(menu, 'Copy', () => _ggCopyCommand(cmdIndex), isLight);
+        _ggAddCtxItem(menu, `Edit ${cmd.type}...`, () => editGitGraphCommand(cmdIndex));
+        _ggAddCtxItem(menu, `Delete ${cmd.type}`, () => deleteGitGraphCommand(cmdIndex));
+        _ggAddCtxSeparator(menu);
+        _ggAddCtxItem(menu, 'Copy', () => _ggCopyCommand(cmdIndex));
         if (ggClipboard) {
-            _ggAddCtxItem(menu, 'Paste Above', () => _ggPasteCommand(cmdIndex), isLight);
-            _ggAddCtxItem(menu, 'Paste Below', () => _ggPasteCommand(cmdIndex + 1), isLight);
+            _ggAddCtxItem(menu, 'Paste Above', () => _ggPasteCommand(cmdIndex));
+            _ggAddCtxItem(menu, 'Paste Below', () => _ggPasteCommand(cmdIndex + 1));
         }
-        _ggAddCtxSeparator(menu, isLight);
+        _ggAddCtxSeparator(menu);
         if (cmdIndex > 0) {
             _ggAddCtxItem(menu, 'Move Up', () => {
                 window.chrome.webview.postMessage({ type: 'gg_commandMoved', fromIndex: cmdIndex, toIndex: cmdIndex - 1 });
-            }, isLight);
+            });
         }
         if (cmdIndex < gitGraphModel.commands.length - 1) {
             _ggAddCtxItem(menu, 'Move Down', () => {
                 window.chrome.webview.postMessage({ type: 'gg_commandMoved', fromIndex: cmdIndex, toIndex: cmdIndex + 1 });
-            }, isLight);
+            });
         }
-        _ggAddCtxSeparator(menu, isLight);
+        _ggAddCtxSeparator(menu);
         _ggAddCtxItem(menu, 'Insert Commit Above', () => {
             const msg = { type: 'gg_commandCreated', commandType: 'commit', insertAtIndex: cmdIndex };
             window.chrome.webview.postMessage(msg);
-        }, isLight);
+        });
         _ggAddCtxItem(menu, 'Insert Commit Below', () => {
             const msg = { type: 'gg_commandCreated', commandType: 'commit', insertAtIndex: cmdIndex + 1 };
             window.chrome.webview.postMessage(msg);
-        }, isLight);
+        });
     } else {
         // Background context menu
-        _ggAddCtxItem(menu, 'Add Commit', () => createGitGraphCommand('commit'), isLight);
-        _ggAddCtxItem(menu, 'Add Branch', () => createGitGraphCommand('branch'), isLight);
-        _ggAddCtxItem(menu, 'Add Checkout', () => createGitGraphCommand('checkout'), isLight);
-        _ggAddCtxItem(menu, 'Add Merge', () => createGitGraphCommand('merge'), isLight);
-        _ggAddCtxItem(menu, 'Add Cherry-pick', () => createGitGraphCommand('cherry-pick'), isLight);
-        _ggAddCtxSeparator(menu, isLight);
+        _ggAddCtxItem(menu, 'Add Commit', () => createGitGraphCommand('commit'));
+        _ggAddCtxItem(menu, 'Add Branch', () => createGitGraphCommand('branch'));
+        _ggAddCtxItem(menu, 'Add Checkout', () => createGitGraphCommand('checkout'));
+        _ggAddCtxItem(menu, 'Add Merge', () => createGitGraphCommand('merge'));
+        _ggAddCtxItem(menu, 'Add Cherry-pick', () => createGitGraphCommand('cherry-pick'));
+        _ggAddCtxSeparator(menu);
         if (ggClipboard) {
-            _ggAddCtxItem(menu, 'Paste at End', () => _ggPasteCommand(null), isLight);
-            _ggAddCtxSeparator(menu, isLight);
+            _ggAddCtxItem(menu, 'Paste at End', () => _ggPasteCommand(null));
+            _ggAddCtxSeparator(menu);
         }
-        _ggAddCtxItem(menu, 'Settings...', () => editGitGraphSettings(), isLight);
+        _ggAddCtxItem(menu, 'Settings...', () => editGitGraphSettings());
     }
 
     document.body.appendChild(menu);
