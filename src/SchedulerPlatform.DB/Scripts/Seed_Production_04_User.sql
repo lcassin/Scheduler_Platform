@@ -31,6 +31,7 @@ SELECT
     '        [UserId], [Username], [Email], [FirstName], [LastName], [ClientId],' + CHAR(13) + CHAR(10) +
     '        [IsActive], [ExternalUserId], [ExternalIssuer], [PasswordHash],' + CHAR(13) + CHAR(10) +
     '        [IsSystemAdmin], [LastLoginDateTime], [MustChangePassword], [PasswordChangedDateTime],' + CHAR(13) + CHAR(10) +
+    '        [PreferredTimeZone],' + CHAR(13) + CHAR(10) +
     '        [CreatedDateTime], [ModifiedDateTime], [CreatedBy], [ModifiedBy], [IsDeleted]' + CHAR(13) + CHAR(10) +
     '    )' + CHAR(13) + CHAR(10) +
     '    VALUES (' +
@@ -48,6 +49,7 @@ SELECT
         'NULL, ' + -- Reset LastLoginDateTime for production
         CAST(u.[MustChangePassword] AS NVARCHAR(1)) + ', ' +
         CASE WHEN u.[PasswordChangedDateTime] IS NULL THEN 'NULL' ELSE '''' + CONVERT(NVARCHAR(30), u.[PasswordChangedDateTime], 126) + '''' END + ', ' +
+        CASE WHEN u.[PreferredTimeZone] IS NULL THEN 'NULL' ELSE 'N''' + REPLACE(u.[PreferredTimeZone], '''', '''''') + '''' END + ', ' +
         'GETUTCDATE(), ' +
         'GETUTCDATE(), ' +
         'N''ProductionSeed'', ' +
