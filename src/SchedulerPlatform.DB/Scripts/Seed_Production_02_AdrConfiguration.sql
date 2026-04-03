@@ -24,20 +24,21 @@ SELECT
     'IF NOT EXISTS (SELECT 1 FROM [dbo].[AdrConfiguration] WHERE [AdrConfigurationId] = ' + CAST([AdrConfigurationId] AS NVARCHAR(20)) + ')' + CHAR(13) + CHAR(10) +
     'BEGIN' + CHAR(13) + CHAR(10) +
     '    INSERT INTO [dbo].[AdrConfiguration] (' + CHAR(13) + CHAR(10) +
-    '        [AdrConfigurationId], [CredentialCheckLeadDays], [ScrapeRetryDays], [MaxRetries],' + CHAR(13) + CHAR(10) +
-    '        [FinalStatusCheckDelayDays], [DailyStatusCheckDelayDays], [MaxParallelRequests], [BatchSize],' + CHAR(13) + CHAR(10) +
+    '        [AdrConfigurationId], [ScrapeRetryDays], [MaxRetries],' + CHAR(13) + CHAR(10) +
+    '        [DailyStatusCheckDelayDays], [MaxParallelRequests], [BatchSize],' + CHAR(13) + CHAR(10) +
     '        [DefaultWindowDaysBefore], [DefaultWindowDaysAfter], [AutoCreateTestLoginRules], [AutoCreateMissingInvoiceAlerts],' + CHAR(13) + CHAR(10) +
     '        [MissingInvoiceAlertEmail], [IsOrchestrationEnabled], [Notes],' + CHAR(13) + CHAR(10) +
     '        [CreatedDateTime], [CreatedBy], [ModifiedDateTime], [ModifiedBy], [IsDeleted],' + CHAR(13) + CHAR(10) +
     '        [JobRetentionMonths], [JobExecutionRetentionMonths], [AuditLogRetentionDays], [IsArchivalEnabled],' + CHAR(13) + CHAR(10) +
-    '        [ArchivalBatchSize], [ArchiveRetentionYears], [LogRetentionDays], [MaxOrchestrationDurationMinutes], [DatabaseCommandTimeoutSeconds]' + CHAR(13) + CHAR(10) +
+    '        [ArchivalBatchSize], [ArchiveRetentionYears], [LogRetentionDays], [MaxOrchestrationDurationMinutes], [DatabaseCommandTimeoutSeconds],' + CHAR(13) + CHAR(10) +
+    '        [TestModeEnabled], [TestModeMaxScrapingJobs], [TestModeMaxRebillJobs],' + CHAR(13) + CHAR(10) +
+    '        [EnableDetailedLogging], [ErrorNotificationsEnabled], [ErrorNotificationRecipients],' + CHAR(13) + CHAR(10) +
+    '        [OrchestrationNotificationsEnabled], [OrchestrationNotificationRecipients]' + CHAR(13) + CHAR(10) +
     '    )' + CHAR(13) + CHAR(10) +
     '    VALUES (' +
         CAST([AdrConfigurationId] AS NVARCHAR(20)) + ', ' +
-        CAST([CredentialCheckLeadDays] AS NVARCHAR(10)) + ', ' +
         CAST([ScrapeRetryDays] AS NVARCHAR(10)) + ', ' +
         CAST([MaxRetries] AS NVARCHAR(10)) + ', ' +
-        CAST([FinalStatusCheckDelayDays] AS NVARCHAR(10)) + ', ' +
         CAST([DailyStatusCheckDelayDays] AS NVARCHAR(10)) + ', ' +
         CAST([MaxParallelRequests] AS NVARCHAR(10)) + ', ' +
         CAST([BatchSize] AS NVARCHAR(10)) + ', ' +
@@ -61,7 +62,15 @@ SELECT
         CAST([ArchiveRetentionYears] AS NVARCHAR(10)) + ', ' +
         CAST([LogRetentionDays] AS NVARCHAR(10)) + ', ' +
         CAST([MaxOrchestrationDurationMinutes] AS NVARCHAR(10)) + ', ' +
-        CAST([DatabaseCommandTimeoutSeconds] AS NVARCHAR(10)) +
+        CAST([DatabaseCommandTimeoutSeconds] AS NVARCHAR(10)) + ', ' +
+        CAST([TestModeEnabled] AS NVARCHAR(1)) + ', ' +
+        CAST([TestModeMaxScrapingJobs] AS NVARCHAR(10)) + ', ' +
+        CAST([TestModeMaxRebillJobs] AS NVARCHAR(10)) + ', ' +
+        CAST([EnableDetailedLogging] AS NVARCHAR(1)) + ', ' +
+        CAST([ErrorNotificationsEnabled] AS NVARCHAR(1)) + ', ' +
+        CASE WHEN [ErrorNotificationRecipients] IS NULL THEN 'NULL' ELSE 'N''' + REPLACE([ErrorNotificationRecipients], '''', '''''') + '''' END + ', ' +
+        CAST([OrchestrationNotificationsEnabled] AS NVARCHAR(1)) + ', ' +
+        CASE WHEN [OrchestrationNotificationRecipients] IS NULL THEN 'NULL' ELSE 'N''' + REPLACE([OrchestrationNotificationRecipients], '''', '''''') + '''' END +
     ');' + CHAR(13) + CHAR(10) +
     'END' AS [--SqlStatement]
 FROM [dbo].[AdrConfiguration]
