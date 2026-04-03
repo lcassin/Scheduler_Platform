@@ -40,8 +40,9 @@
 --   3. Each script outputs INSERT statements as a result set
 --   4. Copy the generated INSERT statements from the results
 --   5. Connect to your Production database
---   6. Run Script 04 directly against Production (it contains static INSERTs)
---   7. Run the copied INSERT statements (from step 4) against Production in order
+--   6. Run the copied INSERT statements (from step 4) against Production in order
+--      (start with Client from Script 01 since User depends on ClientId 1)
+--   7. Run Script 04 directly against Production (it contains static INSERTs)
 --   8. Start/restart the API application so:
 --      - SystemScheduleSeeder creates system schedules automatically
 --      - Quartz picks up the seeded trigger records
@@ -51,7 +52,8 @@
 --   - IDENTITY_INSERT is toggled ON/OFF to preserve/control primary key values
 --   - Scripts 01-03, 05-06: Audit fields set to 'ProductionSeed'
 --   - Script 04: Audit fields preserved from UAT data as-is
---   - LastLoginDateTime and LastRunDateTime are reset to NULL for production
+--   - Scripts 01-03, 05-06: LastLoginDateTime, LastRunDateTime reset to NULL
+--   - Script 04: LastLoginDateTime preserved from UAT (user-provided data)
 --   - LastSyncedDateTime on Client is reset to NULL (will sync on first run)
 --   - Script 04 contains hardcoded user data from UAT (password hashes, emails);
 --     ensure this repo has appropriate access controls
