@@ -17,9 +17,9 @@
 
 SET NOCOUNT ON;
 
-SELECT
-    'SET IDENTITY_INSERT [dbo].[Client] ON;' AS [--SqlStatement]
-UNION ALL
+PRINT 'SET IDENTITY_INSERT [dbo].[Client] ON;';
+PRINT '';
+
 SELECT
     'IF NOT EXISTS (SELECT 1 FROM [dbo].[Client] WHERE [ClientId] = ' + CAST([ClientId] AS NVARCHAR(20)) + ')' + CHAR(13) + CHAR(10) +
     'BEGIN' + CHAR(13) + CHAR(10) +
@@ -39,13 +39,13 @@ SELECT
         'N''ProductionSeed'', ' +
         '0' +
     ');' + CHAR(13) + CHAR(10) +
-    'END'
+    'END' AS [--SqlStatement]
 FROM [dbo].[Client]
 WHERE [IsDeleted] = 0
-ORDER BY [ClientId]
-UNION ALL
-SELECT
-    'SET IDENTITY_INSERT [dbo].[Client] OFF;'
+ORDER BY [ClientId];
+
+PRINT '';
+PRINT 'SET IDENTITY_INSERT [dbo].[Client] OFF;';
 
 SET NOCOUNT OFF;
 

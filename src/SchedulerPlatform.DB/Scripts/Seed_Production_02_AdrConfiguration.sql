@@ -17,9 +17,9 @@
 
 SET NOCOUNT ON;
 
-SELECT
-    'SET IDENTITY_INSERT [dbo].[AdrConfiguration] ON;' AS [--SqlStatement]
-UNION ALL
+PRINT 'SET IDENTITY_INSERT [dbo].[AdrConfiguration] ON;';
+PRINT '';
+
 SELECT
     'IF NOT EXISTS (SELECT 1 FROM [dbo].[AdrConfiguration] WHERE [AdrConfigurationId] = ' + CAST([AdrConfigurationId] AS NVARCHAR(20)) + ')' + CHAR(13) + CHAR(10) +
     'BEGIN' + CHAR(13) + CHAR(10) +
@@ -63,11 +63,11 @@ SELECT
         CAST([MaxOrchestrationDurationMinutes] AS NVARCHAR(10)) + ', ' +
         CAST([DatabaseCommandTimeoutSeconds] AS NVARCHAR(10)) +
     ');' + CHAR(13) + CHAR(10) +
-    'END'
+    'END' AS [--SqlStatement]
 FROM [dbo].[AdrConfiguration]
-WHERE [IsDeleted] = 0
-UNION ALL
-SELECT
-    'SET IDENTITY_INSERT [dbo].[AdrConfiguration] OFF;'
+WHERE [IsDeleted] = 0;
+
+PRINT '';
+PRINT 'SET IDENTITY_INSERT [dbo].[AdrConfiguration] OFF;';
 
 SET NOCOUNT OFF;

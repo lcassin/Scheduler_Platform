@@ -17,9 +17,9 @@
 
 SET NOCOUNT ON;
 
-SELECT
-    'SET IDENTITY_INSERT [dbo].[PowerBiReport] ON;' AS [--SqlStatement]
-UNION ALL
+PRINT 'SET IDENTITY_INSERT [dbo].[PowerBiReport] ON;';
+PRINT '';
+
 SELECT
     'IF NOT EXISTS (SELECT 1 FROM [dbo].[PowerBiReport] WHERE [PowerBiReportId] = ' + CAST([PowerBiReportId] AS NVARCHAR(20)) + ')' + CHAR(13) + CHAR(10) +
     'BEGIN' + CHAR(13) + CHAR(10) +
@@ -42,9 +42,9 @@ SELECT
     'END'
 FROM [dbo].[PowerBiReport]
 WHERE [IsDeleted] = 0
-ORDER BY [DisplayOrder]
-UNION ALL
-SELECT
-    'SET IDENTITY_INSERT [dbo].[PowerBiReport] OFF;'
+ORDER BY [DisplayOrder];
+
+PRINT '';
+PRINT 'SET IDENTITY_INSERT [dbo].[PowerBiReport] OFF;';
 
 SET NOCOUNT OFF;

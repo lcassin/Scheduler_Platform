@@ -21,9 +21,9 @@ PRINT '-- ======================================================================
 PRINT '-- Users';
 PRINT '-- ============================================================================';
 
-SELECT
-    'SET IDENTITY_INSERT [dbo].[User] ON;' AS [--SqlStatement]
-UNION ALL
+PRINT 'SET IDENTITY_INSERT [dbo].[User] ON;';
+PRINT '';
+
 SELECT
     'IF NOT EXISTS (SELECT 1 FROM [dbo].[User] WHERE [UserId] = ' + CAST(u.[UserId] AS NVARCHAR(20)) + ')' + CHAR(13) + CHAR(10) +
     'BEGIN' + CHAR(13) + CHAR(10) +
@@ -57,10 +57,10 @@ SELECT
     'END'
 FROM [dbo].[User] u
 WHERE u.[IsDeleted] = 0
-ORDER BY u.[UserId]
-UNION ALL
-SELECT
-    'SET IDENTITY_INSERT [dbo].[User] OFF;'
+ORDER BY u.[UserId];
+
+PRINT '';
+PRINT 'SET IDENTITY_INSERT [dbo].[User] OFF;';
 
 -- ============================================================================
 -- STEP 1B: Run this against UAT to generate UserPermission INSERT statements
@@ -71,9 +71,9 @@ PRINT '-- ======================================================================
 PRINT '-- User Permissions';
 PRINT '-- ============================================================================';
 
-SELECT
-    'SET IDENTITY_INSERT [dbo].[UserPermission] ON;' AS [--SqlStatement]
-UNION ALL
+PRINT 'SET IDENTITY_INSERT [dbo].[UserPermission] ON;';
+PRINT '';
+
 SELECT
     'IF NOT EXISTS (SELECT 1 FROM [dbo].[UserPermission] WHERE [UserPermissionId] = ' + CAST(up.[UserPermissionId] AS NVARCHAR(20)) + ')' + CHAR(13) + CHAR(10) +
     'BEGIN' + CHAR(13) + CHAR(10) +
@@ -104,9 +104,9 @@ FROM [dbo].[UserPermission] up
     INNER JOIN [dbo].[User] u ON up.[UserId] = u.[UserId]
 WHERE up.[IsDeleted] = 0
     AND u.[IsDeleted] = 0
-ORDER BY up.[UserId], up.[UserPermissionId]
-UNION ALL
-SELECT
-    'SET IDENTITY_INSERT [dbo].[UserPermission] OFF;'
+ORDER BY up.[UserId], up.[UserPermissionId];
+
+PRINT '';
+PRINT 'SET IDENTITY_INSERT [dbo].[UserPermission] OFF;';
 
 SET NOCOUNT OFF;

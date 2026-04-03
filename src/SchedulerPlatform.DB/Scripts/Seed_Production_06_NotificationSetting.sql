@@ -19,9 +19,9 @@
 
 SET NOCOUNT ON;
 
-SELECT
-    'SET IDENTITY_INSERT [dbo].[NotificationSetting] ON;' AS [--SqlStatement]
-UNION ALL
+PRINT 'SET IDENTITY_INSERT [dbo].[NotificationSetting] ON;';
+PRINT '';
+
 SELECT
     'IF NOT EXISTS (SELECT 1 FROM [dbo].[NotificationSetting] WHERE [NotificationSettingId] = ' + CAST(ns.[NotificationSettingId] AS NVARCHAR(20)) + ')' + CHAR(13) + CHAR(10) +
     'BEGIN' + CHAR(13) + CHAR(10) +
@@ -55,9 +55,9 @@ FROM [dbo].[NotificationSetting] ns
     INNER JOIN [dbo].[Schedule] s ON ns.[ScheduleId] = s.[ScheduleId]
 WHERE ns.[IsDeleted] = 0
     AND s.[IsDeleted] = 0
-ORDER BY ns.[ScheduleId], ns.[NotificationSettingId]
-UNION ALL
-SELECT
-    'SET IDENTITY_INSERT [dbo].[NotificationSetting] OFF;'
+ORDER BY ns.[ScheduleId], ns.[NotificationSettingId];
+
+PRINT '';
+PRINT 'SET IDENTITY_INSERT [dbo].[NotificationSetting] OFF;';
 
 SET NOCOUNT OFF;

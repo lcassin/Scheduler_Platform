@@ -37,9 +37,9 @@ PRINT '-- ======================================================================
 PRINT '-- Schedules (non-system only)';
 PRINT '-- ============================================================================';
 
-SELECT
-    'SET IDENTITY_INSERT [dbo].[Schedule] ON;' AS [--SqlStatement]
-UNION ALL
+PRINT 'SET IDENTITY_INSERT [dbo].[Schedule] ON;';
+PRINT '';
+
 SELECT
     'IF NOT EXISTS (SELECT 1 FROM [dbo].[Schedule] WHERE [ScheduleId] = ' + CAST(s.[ScheduleId] AS NVARCHAR(20)) + ')' + CHAR(13) + CHAR(10) +
     'BEGIN' + CHAR(13) + CHAR(10) +
@@ -77,10 +77,10 @@ SELECT
 FROM [dbo].[Schedule] s
 WHERE s.[IsDeleted] = 0
     AND s.[IsSystemSchedule] = 0  -- Exclude system schedules (auto-created on startup)
-ORDER BY s.[ScheduleId]
-UNION ALL
-SELECT
-    'SET IDENTITY_INSERT [dbo].[Schedule] OFF;'
+ORDER BY s.[ScheduleId];
+
+PRINT '';
+PRINT 'SET IDENTITY_INSERT [dbo].[Schedule] OFF;';
 
 -- ============================================================================
 -- STEP 1B: Run this against UAT to generate QRTZ_JOB_DETAILS INSERT statements
