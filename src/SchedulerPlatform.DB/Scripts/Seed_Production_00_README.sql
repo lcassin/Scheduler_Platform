@@ -1,8 +1,10 @@
 -- ============================================================================
 -- PRODUCTION DATABASE SEED SCRIPTS - README
 -- ============================================================================
--- These scripts generate INSERT statements from a UAT database that can be
--- run against a Production database to seed it with the same configuration.
+-- Scripts 01-03 and 05-06 generate INSERT statements from a UAT database
+-- that can be run against a Production database to seed it with the same
+-- configuration. Script 04 (User/UserPermission) is a direct-execution
+-- script that runs against Production (not UAT).
 --
 -- WHAT IS SEEDED:
 --   1. Client              - Client records
@@ -34,19 +36,23 @@
 --
 -- HOW TO USE:
 --   1. Connect to your UAT database in SSMS or Azure Data Studio
---   2. Run each script (01 through 06) in order against UAT
+--   2. Run scripts 01, 02, 03, 05, and 06 in order against UAT
 --   3. Each script outputs INSERT statements as a result set
 --   4. Copy the generated INSERT statements from the results
 --   5. Connect to your Production database
---   6. Run the copied INSERT statements against Production in order
---   7. Start/restart the API application so:
+--   6. Run Script 04 directly against Production (it contains static INSERTs)
+--   7. Run the copied INSERT statements (from step 4) against Production in order
+--   8. Start/restart the API application so:
 --      - SystemScheduleSeeder creates system schedules automatically
 --      - Quartz picks up the seeded trigger records
 --
 -- NOTES:
 --   - All scripts use IF NOT EXISTS checks, so they are safe to re-run
---   - IDENTITY_INSERT is toggled ON/OFF to preserve UAT primary key values
---   - Audit fields (CreatedBy/ModifiedBy) are set to 'ProductionSeed'
+--   - IDENTITY_INSERT is toggled ON/OFF to preserve/control primary key values
+--   - Scripts 01-03, 05-06: Audit fields set to 'ProductionSeed'
+--   - Script 04: Audit fields preserved from UAT data as-is
 --   - LastLoginDateTime and LastRunDateTime are reset to NULL for production
 --   - LastSyncedDateTime on Client is reset to NULL (will sync on first run)
+--   - Script 04 contains hardcoded user data from UAT (password hashes, emails);
+--     ensure this repo has appropriate access controls
 -- ============================================================================
