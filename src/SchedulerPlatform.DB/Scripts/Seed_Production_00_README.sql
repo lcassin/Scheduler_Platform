@@ -1,0 +1,60 @@
+-- ============================================================================
+-- PRODUCTION DATABASE SEED SCRIPTS - README
+-- ============================================================================
+-- Scripts 01-03 and 05-06 generate INSERT statements from a UAT database
+-- that can be run against a Production database to seed it with the same
+-- configuration. Script 04 (User/UserPermission) is a direct-execution
+-- script that runs against Production (not UAT).
+--
+-- WHAT IS SEEDED:
+--   1. Client              - Client records
+--   2. AdrConfiguration    - ADR orchestration configuration settings
+--   3. PowerBiReport       - Power BI report links
+--   4. User & UserPermission - Users and their permission assignments
+--   5. Schedule & Quartz   - Non-system schedules with Quartz job/trigger records
+--   6. NotificationSetting - Email notification settings for schedules
+--
+-- WHAT IS NOT SEEDED (will be created fresh in production):
+--   - AdrAccount, AdrAccountBlacklist, AdrAccountRule (created by orchestration sync)
+--   - AdrJob, AdrJobExecution (created by orchestration runs)
+--   - AdrOrchestrationRun (created by orchestration runs)
+--   - JobExecution, JobParameter (created by schedule executions)
+--   - AuditLog (created automatically by the audit interceptor)
+--   - PasswordHistory (created when users change passwords)
+--   - System schedules (System Maintenance, ADR Full Cycle, ADR Status Check)
+--     are auto-created by SystemScheduleSeeder on API startup
+--
+-- EXECUTION ORDER:
+--   Scripts MUST be run in numerical order due to foreign key dependencies:
+--
+--   Step 1: Seed_Production_01_Client.sql            (no dependencies)
+--   Step 2: Seed_Production_02_AdrConfiguration.sql  (no dependencies)
+--   Step 3: Seed_Production_03_PowerBiReport.sql     (no dependencies)
+--   Step 4: Seed_Production_04_User.sql              (depends on Client)
+--   Step 5: Seed_Production_05_Schedule.sql          (depends on Client)
+--   Step 6: Seed_Production_06_NotificationSetting.sql (depends on Schedule)
+--
+-- HOW TO USE:
+--   1. Connect to your UAT database in SSMS or Azure Data Studio
+--   2. Run scripts 01, 02, 03, 05, and 06 in order against UAT
+--   3. Each script outputs INSERT statements as a result set
+--   4. Copy the generated INSERT statements from the results
+--   5. Connect to your Production database
+--   6. Run the copied INSERT statements (from step 4) against Production in order
+--      (start with Client from Script 01 since User depends on ClientId 1)
+--   7. Run Script 04 directly against Production (it contains static INSERTs)
+--   8. Start/restart the API application so:
+--      - SystemScheduleSeeder creates system schedules automatically
+--      - Quartz picks up the seeded trigger records
+--
+-- NOTES:
+--   - All scripts use IF NOT EXISTS checks, so they are safe to re-run
+--   - IDENTITY_INSERT is toggled ON/OFF to preserve/control primary key values
+--   - Scripts 01-03, 05-06: Audit fields set to 'ProductionSeed'
+--   - Script 04: Audit fields preserved from UAT data as-is
+--   - Scripts 01-03, 05-06: LastLoginDateTime, LastRunDateTime reset to NULL
+--   - Script 04: LastLoginDateTime preserved from UAT (user-provided data)
+--   - LastSyncedDateTime on Client is reset to NULL (will sync on first run)
+--   - Script 04 contains hardcoded user data from UAT (password hashes, emails);
+--     ensure this repo has appropriate access controls
+-- ============================================================================
