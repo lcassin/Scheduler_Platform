@@ -20,7 +20,8 @@ public enum ActiveDiagramType
     Pie,
     Timeline,
     Journey,
-    QuadrantChart
+    QuadrantChart,
+    GitGraph
 }
 
 /// <summary>
@@ -254,6 +255,12 @@ public partial class VisualEditorBridge
                 await RestoreQuadrantChartToEditorAsync();
                 RaiseQuadrantChartModelChanged("undo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.GitGraph)
+            {
+                RestoreGitGraphModelFromJson(previousJson);
+                await RestoreGitGraphToEditorAsync();
+                RaiseGitGraphModelChanged("undo");
+            }
             else
             {
                 RestoreModelFromJson(previousJson);
@@ -347,6 +354,12 @@ public partial class VisualEditorBridge
                 await RestoreQuadrantChartToEditorAsync();
                 RaiseQuadrantChartModelChanged("redo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.GitGraph)
+            {
+                RestoreGitGraphModelFromJson(redoJson);
+                await RestoreGitGraphToEditorAsync();
+                RaiseGitGraphModelChanged("redo");
+            }
             else
             {
                 RestoreModelFromJson(redoJson);
@@ -385,6 +398,8 @@ public partial class VisualEditorBridge
             return ConvertJourneyModelToJson(_journeyModel);
         if (_activeDiagramType == ActiveDiagramType.QuadrantChart && _quadrantChartModel != null)
             return ConvertQuadrantChartModelToJson(_quadrantChartModel);
+        if (_activeDiagramType == ActiveDiagramType.GitGraph && _gitGraphModel != null)
+            return ConvertGitGraphModelToJson(_gitGraphModel);
         return ConvertModelToJson(_model);
     }
 
@@ -961,6 +976,28 @@ public partial class VisualEditorBridge
                     break;
 
                 case "qc_pointSelected":
+                    break;
+
+                // ===== GitGraph Messages =====
+
+                case "gg_commandCreated":
+                    HandleGitGraphCommandCreated(root);
+                    break;
+
+                case "gg_commandEdited":
+                    HandleGitGraphCommandEdited(root);
+                    break;
+
+                case "gg_commandDeleted":
+                    HandleGitGraphCommandDeleted(root);
+                    break;
+
+                case "gg_commandMoved":
+                    HandleGitGraphCommandMoved(root);
+                    break;
+
+                case "gg_settingsChanged":
+                    HandleGitGraphSettingsChanged(root);
                     break;
             }
         }

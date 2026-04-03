@@ -1893,3 +1893,93 @@ public class QuadrantPoint
     /// </summary>
     public double Y { get; set; }
 }
+
+// =============================================
+// GitGraph Models
+// =============================================
+
+/// <summary>
+/// Represents a Mermaid gitGraph diagram.
+/// Syntax:
+///   gitGraph
+///       commit id: "Initial"
+///       branch develop
+///       checkout develop
+///       commit id: "Feature"
+///       checkout main
+///       merge develop tag: "v1.0"
+/// </summary>
+public class GitGraphModel
+{
+    /// <summary>
+    /// The diagram title (optional, set via accTitle).
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Ordered list of git commands that build the graph.
+    /// Each command is one of: commit, branch, checkout/switch, merge, cherry-pick.
+    /// </summary>
+    public List<GitGraphCommand> Commands { get; set; } = new();
+
+    /// <summary>
+    /// Comments preserved from the original text.
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines before the gitGraph declaration (frontmatter, config directives).
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The line index of the gitGraph declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+
+    /// <summary>
+    /// Optional LR (left-to-right) or TB (top-to-bottom) orientation after gitGraph keyword.
+    /// </summary>
+    public string? Orientation { get; set; }
+}
+
+/// <summary>
+/// Represents a single command in a gitGraph diagram.
+/// </summary>
+public class GitGraphCommand
+{
+    /// <summary>
+    /// The command type: "commit", "branch", "checkout", "merge", "cherry-pick".
+    /// </summary>
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Commit ID (for commit, merge, cherry-pick). Optional.
+    /// </summary>
+    public string? Id { get; set; }
+
+    /// <summary>
+    /// Tag label (for commit, merge). Optional.
+    /// </summary>
+    public string? Tag { get; set; }
+
+    /// <summary>
+    /// Commit type: NORMAL, REVERSE, HIGHLIGHT (for commit, merge). Optional.
+    /// </summary>
+    public string? CommitType { get; set; }
+
+    /// <summary>
+    /// Branch name (for branch, checkout/switch, merge).
+    /// </summary>
+    public string? BranchName { get; set; }
+
+    /// <summary>
+    /// Branch order (for branch command). Optional.
+    /// </summary>
+    public int? Order { get; set; }
+
+    /// <summary>
+    /// Parent commit ID for cherry-pick. Optional.
+    /// </summary>
+    public string? Parent { get; set; }
+}

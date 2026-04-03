@@ -3310,4 +3310,154 @@ public static class MermaidParser
 
         return foundDeclaration ? model : null;
     }
+
+    // ========== GitGraph Parser ==========
+
+    private static readonly Regex GitGraphDeclaration = new(@"^\s*gitGraph\s*(LR|TB|BT)?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex GitGraphCommitPattern = new(@"^\s*commit\b(.*)$", RegexOptions.Compiled);
+    private static readonly Regex GitGraphBranchPattern = new(@"^\s*branch\s+(\S+)(.*)$", RegexOptions.Compiled);
+    private static readonly Regex GitGraphCheckoutPattern = new(@"^\s*(?:checkout|switch)\s+(\S+)\s*$", RegexOptions.Compiled);
+    private static readonly Regex GitGraphMergePattern = new(@"^\s*merge\s+(\S+)(.*)$", RegexOptions.Compiled);
+    private static readonly Regex GitGraphCherryPickPattern = new(@"^\s*cherry-pick\b(.*)$", RegexOptions.Compiled);
+    private static readonly Regex GitGraphIdPattern = new(@"id:\s*""([^""]*)""", RegexOptions.Compiled);
+    private static readonly Regex GitGraphTagPattern = new(@"tag:\s*""([^""]*)""", RegexOptions.Compiled);
+    private static readonly Regex GitGraphTypePattern = new(@"type:\s*(NORMAL|REVERSE|HIGHLIGHT)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex GitGraphOrderPattern = new(@"order:\s*(\d+)", RegexOptions.Compiled);
+    private static readonly Regex GitGraphParentPattern = new(@"parent:\s*""([^""]*)""", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses Mermaid gitGraph text into a GitGraphModel.
+    /// </summary>
+    public static GitGraphModel? ParseGitGraph(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new GitGraphModel();
+        bool foundDeclaration = false;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                model.Comments.Add(new CommentEntry
+                {
+                    Text = commentMatch.Groups[1].Value,
+                    OriginalLineIndex = i
+                });
+                continue;
+            }
+
+            // Look for gitGraph declaration
+            if (!foundDeclaration)
+            {
+                var declMatch = GitGraphDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    foundDeclaration = true;
+                    model.DeclarationLineIndex = i;
+                    if (declMatch.Groups[1].Success && !string.IsNullOrEmpty(declMatch.Groups[1].Value))
+                        model.Orientation = declMatch.Groups[1].Value.ToUpperInvariant();
+                    continue;
+                }
+
+                model.PreambleLines.Add(line);
+                continue;
+            }
+
+            var trimmed = line.Trim();
+
+            // commit [id: "..."] [tag: "..."] [type: NORMAL|REVERSE|HIGHLIGHT]
+            var commitMatch = GitGraphCommitPattern.Match(trimmed);
+            if (commitMatch.Success)
+            {
+                var cmd = new GitGraphCommand { Type = "commit" };
+                var rest = commitMatch.Groups[1].Value;
+                var idMatch = GitGraphIdPattern.Match(rest);
+                if (idMatch.Success) cmd.Id = idMatch.Groups[1].Value;
+                var tagMatch = GitGraphTagPattern.Match(rest);
+                if (tagMatch.Success) cmd.Tag = tagMatch.Groups[1].Value;
+                var typeMatch = GitGraphTypePattern.Match(rest);
+                if (typeMatch.Success) cmd.CommitType = typeMatch.Groups[1].Value.ToUpperInvariant();
+                model.Commands.Add(cmd);
+                continue;
+            }
+
+            // branch <name> [order: N]
+            var branchMatch = GitGraphBranchPattern.Match(trimmed);
+            if (branchMatch.Success)
+            {
+                var cmd = new GitGraphCommand
+                {
+                    Type = "branch",
+                    BranchName = branchMatch.Groups[1].Value
+                };
+                var rest = branchMatch.Groups[2].Value;
+                var orderMatch = GitGraphOrderPattern.Match(rest);
+                if (orderMatch.Success && int.TryParse(orderMatch.Groups[1].Value, out var order))
+                    cmd.Order = order;
+                model.Commands.Add(cmd);
+                continue;
+            }
+
+            // checkout/switch <name>
+            var checkoutMatch = GitGraphCheckoutPattern.Match(trimmed);
+            if (checkoutMatch.Success)
+            {
+                model.Commands.Add(new GitGraphCommand
+                {
+                    Type = "checkout",
+                    BranchName = checkoutMatch.Groups[1].Value
+                });
+                continue;
+            }
+
+            // merge <name> [id: "..."] [tag: "..."] [type: ...]
+            var mergeMatch = GitGraphMergePattern.Match(trimmed);
+            if (mergeMatch.Success)
+            {
+                var cmd = new GitGraphCommand
+                {
+                    Type = "merge",
+                    BranchName = mergeMatch.Groups[1].Value
+                };
+                var rest = mergeMatch.Groups[2].Value;
+                var idMatch = GitGraphIdPattern.Match(rest);
+                if (idMatch.Success) cmd.Id = idMatch.Groups[1].Value;
+                var tagMatch = GitGraphTagPattern.Match(rest);
+                if (tagMatch.Success) cmd.Tag = tagMatch.Groups[1].Value;
+                var typeMatch = GitGraphTypePattern.Match(rest);
+                if (typeMatch.Success) cmd.CommitType = typeMatch.Groups[1].Value.ToUpperInvariant();
+                model.Commands.Add(cmd);
+                continue;
+            }
+
+            // cherry-pick id: "..." [parent: "..."]
+            var cpMatch = GitGraphCherryPickPattern.Match(trimmed);
+            if (cpMatch.Success)
+            {
+                var cmd = new GitGraphCommand { Type = "cherry-pick" };
+                var rest = cpMatch.Groups[1].Value;
+                var idMatch = GitGraphIdPattern.Match(rest);
+                if (idMatch.Success) cmd.Id = idMatch.Groups[1].Value;
+                var parentMatch = GitGraphParentPattern.Match(rest);
+                if (parentMatch.Success) cmd.Parent = parentMatch.Groups[1].Value;
+                var tagMatch = GitGraphTagPattern.Match(rest);
+                if (tagMatch.Success) cmd.Tag = tagMatch.Groups[1].Value;
+                model.Commands.Add(cmd);
+                continue;
+            }
+        }
+
+        return foundDeclaration ? model : null;
+    }
 }

@@ -2037,4 +2037,115 @@ public static class MermaidSerializer
             }
         }
     }
+
+    // =============================================
+    // GitGraph Serializer
+    // =============================================
+
+    public static string SerializeGitGraph(GitGraphModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments before declaration
+        WriteGitGraphCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write gitGraph declaration with optional orientation
+        if (!string.IsNullOrEmpty(model.Orientation))
+            sb.AppendLine($"gitGraph {model.Orientation}");
+        else
+            sb.AppendLine("gitGraph");
+
+        // Write commands
+        foreach (var cmd in model.Commands)
+        {
+            switch (cmd.Type)
+            {
+                case "commit":
+                    sb.Append($"{Indent}commit");
+                    if (!string.IsNullOrEmpty(cmd.Id))
+                        sb.Append($" id: \"{cmd.Id}\"");
+                    if (!string.IsNullOrEmpty(cmd.Tag))
+                        sb.Append($" tag: \"{cmd.Tag}\"");
+                    if (!string.IsNullOrEmpty(cmd.CommitType) && cmd.CommitType != "NORMAL")
+                        sb.Append($" type: {cmd.CommitType}");
+                    sb.AppendLine();
+                    break;
+
+                case "branch":
+                    sb.Append($"{Indent}branch {cmd.BranchName}");
+                    if (cmd.Order.HasValue)
+                        sb.Append($" order: {cmd.Order.Value}");
+                    sb.AppendLine();
+                    break;
+
+                case "checkout":
+                    sb.AppendLine($"{Indent}checkout {cmd.BranchName}");
+                    break;
+
+                case "merge":
+                    sb.Append($"{Indent}merge {cmd.BranchName}");
+                    if (!string.IsNullOrEmpty(cmd.Id))
+                        sb.Append($" id: \"{cmd.Id}\"");
+                    if (!string.IsNullOrEmpty(cmd.Tag))
+                        sb.Append($" tag: \"{cmd.Tag}\"");
+                    if (!string.IsNullOrEmpty(cmd.CommitType) && cmd.CommitType != "NORMAL")
+                        sb.Append($" type: {cmd.CommitType}");
+                    sb.AppendLine();
+                    break;
+
+                case "cherry-pick":
+                    sb.Append($"{Indent}cherry-pick");
+                    if (!string.IsNullOrEmpty(cmd.Id))
+                        sb.Append($" id: \"{cmd.Id}\"");
+                    if (!string.IsNullOrEmpty(cmd.Parent))
+                        sb.Append($" parent: \"{cmd.Parent}\"");
+                    if (!string.IsNullOrEmpty(cmd.Tag))
+                        sb.Append($" tag: \"{cmd.Tag}\"");
+                    sb.AppendLine();
+                    break;
+            }
+        }
+
+        // Write trailing comments
+        WriteGitGraphTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    private static void WriteGitGraphCommentsBeforeLine(StringBuilder sb, GitGraphModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    private static void WriteGitGraphTrailingComments(StringBuilder sb, GitGraphModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
 }
