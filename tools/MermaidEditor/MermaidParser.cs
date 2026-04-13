@@ -4123,15 +4123,20 @@ public static class MermaidParser
             if (string.IsNullOrWhiteSpace(line))
                 continue;
 
-            // Check for comments
+            // Check for comments (skip @label/@novalue annotations — handled in post-processing)
             var commentMatch = CommentPattern.Match(line);
             if (commentMatch.Success)
             {
-                model.Comments.Add(new CommentEntry
+                var commentText = commentMatch.Groups[1].Value;
+                var trimmedComment = commentText.TrimStart();
+                if (!trimmedComment.StartsWith("@label:") && !trimmedComment.StartsWith("@novalue:"))
                 {
-                    Text = commentMatch.Groups[1].Value,
-                    OriginalLineIndex = i
-                });
+                    model.Comments.Add(new CommentEntry
+                    {
+                        Text = commentText,
+                        OriginalLineIndex = i
+                    });
+                }
                 continue;
             }
 

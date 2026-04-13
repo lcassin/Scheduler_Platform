@@ -176,6 +176,11 @@ public partial class VisualEditorBridge
             foreach (var val in nvProp.EnumerateArray())
                 series.NoValue.Add(val.GetBoolean());
         }
+        else if (root.TryGetProperty("data", out _))
+        {
+            // Data was replaced without explicit NoValue flags — clear all flags
+            series.NoValue.Clear();
+        }
         // Ensure NoValue list matches Data length
         while (series.NoValue.Count < series.Data.Count)
             series.NoValue.Add(false);
