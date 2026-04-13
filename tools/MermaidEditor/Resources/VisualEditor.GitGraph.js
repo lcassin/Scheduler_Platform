@@ -647,12 +647,14 @@ function selectGitGraphCommand(index) {
 
 // ========== GitGraph CRUD Operations ==========
 
-function _ggGetExistingBranches() {
+function _ggGetExistingBranches(beforeIndex) {
     if (!gitGraphModel || !gitGraphModel.commands) return ['main'];
     const branches = new Set(['main']);
-    gitGraphModel.commands.forEach(cmd => {
+    const limit = (typeof beforeIndex === 'number') ? beforeIndex : gitGraphModel.commands.length;
+    for (let i = 0; i < limit && i < gitGraphModel.commands.length; i++) {
+        const cmd = gitGraphModel.commands[i];
         if (cmd.type === 'branch' && cmd.branchName) branches.add(cmd.branchName);
-    });
+    }
     return Array.from(branches);
 }
 
@@ -693,7 +695,9 @@ function _ggReadInsertIndex() {
 
 function createGitGraphCommand(type, presetInsertIndex) {
     if (!gitGraphModel) return;
-    const branches = _ggGetExistingBranches();
+    // For checkout/merge, only show branches declared before the insert position
+    const insertAt = (typeof presetInsertIndex === 'number') ? (presetInsertIndex - 1) : null;
+    const branches = _ggGetExistingBranches(insertAt);
     const cmdCount = (gitGraphModel.commands || []).length;
 
     const propertyPanel = document.getElementById('property-panel');
@@ -810,7 +814,12 @@ function editGitGraphCommand(index) {
     const cmd = gitGraphModel.commands[index];
     if (!cmd) return;
 
-    const branches = _ggGetExistingBranches();
+    // Only show branches declared before the current command position,
+    // but always include the command's current branch so it stays pre-selected
+    const branches = _ggGetExistingBranches(index);
+    if (cmd.branchName && !branches.includes(cmd.branchName)) {
+        branches.push(cmd.branchName);
+    }
     const propertyPanel = document.getElementById('property-panel');
     const propPanelTitle = document.getElementById('property-panel-title');
     propPanelTitle.textContent = `Edit ${cmd.type}`;
