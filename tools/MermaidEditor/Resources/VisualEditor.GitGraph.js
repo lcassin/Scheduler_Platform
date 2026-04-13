@@ -667,15 +667,17 @@ function _ggGetActiveBranchAtIndex(index) {
     return active;
 }
 
-function _ggBuildPositionHtml(cmdCount) {
+function _ggBuildPositionHtml(cmdCount, presetInsertIndex) {
     if (!gitGraphModel || !gitGraphModel.commands || cmdCount <= 0) return '';
     const cmds = gitGraphModel.commands;
+    // presetInsertIndex: if provided, the dropdown value to pre-select (1-based: 0=end, N=before cmd N-1)
+    const preVal = (typeof presetInsertIndex === 'number') ? presetInsertIndex : 0;
     let html = '<div class="property-row"><div class="property-label">Position</div><select class="property-select" id="gg-position">';
-    html += '<option value="0">At end</option>';
+    html += `<option value="0"${preVal === 0 ? ' selected' : ''}>At end</option>`;
     for (let i = 0; i < cmdCount; i++) {
         const desc = _ggFormatCommandLabel(cmds[i]);
         const short = desc.length > 40 ? desc.substring(0, 39) + '\u2026' : desc;
-        html += `<option value="${i + 1}">Before: ${_ggEscapeHtml(short)}</option>`;
+        html += `<option value="${i + 1}"${preVal === i + 1 ? ' selected' : ''}>Before: ${_ggEscapeHtml(short)}</option>`;
     }
     html += '</select></div>';
     return html;
@@ -689,7 +691,7 @@ function _ggReadInsertIndex() {
     return val - 1; // "Before command N" -> index N-1
 }
 
-function createGitGraphCommand(type) {
+function createGitGraphCommand(type, presetInsertIndex) {
     if (!gitGraphModel) return;
     const branches = _ggGetExistingBranches();
     const cmdCount = (gitGraphModel.commands || []).length;
@@ -750,7 +752,7 @@ function createGitGraphCommand(type) {
 
     body.innerHTML = `
         ${fieldsHtml}
-        ${_ggBuildPositionHtml(cmdCount)}
+        ${_ggBuildPositionHtml(cmdCount, presetInsertIndex)}
         <div class="property-row" style="margin-top:8px">
             <button id="gg-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Add ${type}</button>
         </div>`;
@@ -1043,6 +1045,14 @@ function showGitGraphContextMenu(e) {
             const msg = { type: 'gg_commandCreated', commandType: 'commit', insertAtIndex: cmdIndex + 1 };
             window.chrome.webview.postMessage(msg);
         });
+        _ggAddCtxItem(menu, 'Insert Branch Above', () => createGitGraphCommand('branch', cmdIndex + 1));
+        _ggAddCtxItem(menu, 'Insert Branch Below', () => createGitGraphCommand('branch', cmdIndex + 2));
+        _ggAddCtxItem(menu, 'Insert Checkout Above', () => createGitGraphCommand('checkout', cmdIndex + 1));
+        _ggAddCtxItem(menu, 'Insert Checkout Below', () => createGitGraphCommand('checkout', cmdIndex + 2));
+        _ggAddCtxItem(menu, 'Insert Merge Above', () => createGitGraphCommand('merge', cmdIndex + 1));
+        _ggAddCtxItem(menu, 'Insert Merge Below', () => createGitGraphCommand('merge', cmdIndex + 2));
+        _ggAddCtxItem(menu, 'Insert Cherry-pick Above', () => createGitGraphCommand('cherry-pick', cmdIndex + 1));
+        _ggAddCtxItem(menu, 'Insert Cherry-pick Below', () => createGitGraphCommand('cherry-pick', cmdIndex + 2));
     } else {
         // Background context menu
         _ggAddCtxItem(menu, 'Add Commit', () => createGitGraphCommand('commit'));
