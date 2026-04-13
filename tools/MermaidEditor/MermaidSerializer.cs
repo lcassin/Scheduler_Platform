@@ -2059,8 +2059,9 @@ public static class MermaidSerializer
         WriteGitGraphCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
 
         // Write gitGraph declaration with optional orientation
+        // Mermaid v10.3+ syntax requires a colon after the orientation: gitGraph LR:
         if (!string.IsNullOrEmpty(model.Orientation))
-            sb.AppendLine($"gitGraph {model.Orientation}");
+            sb.AppendLine($"gitGraph {model.Orientation}:");
         else
             sb.AppendLine("gitGraph");
 

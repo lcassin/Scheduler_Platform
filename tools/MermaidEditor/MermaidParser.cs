@@ -3313,7 +3313,7 @@ public static class MermaidParser
 
     // ========== GitGraph Parser ==========
 
-    private static readonly Regex GitGraphDeclaration = new(@"^\s*gitGraph\s*(LR|TB|BT)?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex GitGraphDeclaration = new(@"^\s*gitGraph\s*(LR|TB|BT)?:?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex GitGraphCommitPattern = new(@"^\s*commit\b(.*)$", RegexOptions.Compiled);
     private static readonly Regex GitGraphBranchPattern = new(@"^\s*branch\s+(\S+)(.*)$", RegexOptions.Compiled);
     private static readonly Regex GitGraphCheckoutPattern = new(@"^\s*(?:checkout|switch)\s+(\S+)\s*$", RegexOptions.Compiled);

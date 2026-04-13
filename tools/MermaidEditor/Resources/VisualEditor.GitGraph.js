@@ -908,8 +908,8 @@ function deleteGitGraphCommand(index) {
     const label = _ggFormatCommandLabel(cmd);
     body.innerHTML = `
         <div class="property-row">
-            <p style="margin:0">Delete command ${index + 1}?</p>
-            <p style="font-family:monospace;font-size:12px;opacity:0.7;padding:8px;margin:8px 0;background:var(--input-bg);border-radius:4px">${_ggEscapeHtml(label)}</p>
+            <p style="margin:0;color:var(--context-menu-text)">Delete command ${index + 1}?</p>
+            <p style="font-family:monospace;font-size:12px;opacity:0.7;padding:8px;margin:8px 0;background:var(--input-bg);border-radius:4px;color:var(--input-text)">${_ggEscapeHtml(label)}</p>
         </div>
         <div class="property-row" style="margin-top:8px">
             <button id="gg-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:#d32f2f;color:#fff;border:none;border-radius:4px">Delete</button>
