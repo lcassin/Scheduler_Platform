@@ -647,6 +647,38 @@ function selectGitGraphCommand(index) {
 
 // ========== GitGraph CRUD Operations ==========
 
+// Validates a command list for GitGraph ordering constraints.
+// Returns null if valid, or an error string if invalid.
+function _ggValidateCommandList(commands) {
+    const branches = new Set(['main']);
+    let activeBranch = 'main';
+    for (let i = 0; i < commands.length; i++) {
+        const cmd = commands[i];
+        if (cmd.type === 'branch') {
+            if (!cmd.branchName) return `Command ${i + 1}: branch has no name`;
+            if (branches.has(cmd.branchName)) return `Command ${i + 1}: branch "${cmd.branchName}" already exists`;
+            branches.add(cmd.branchName);
+            activeBranch = cmd.branchName;
+        } else if (cmd.type === 'checkout') {
+            if (!cmd.branchName || !branches.has(cmd.branchName)) return `Command ${i + 1}: checkout branch "${cmd.branchName || ''}" does not exist`;
+            activeBranch = cmd.branchName;
+        } else if (cmd.type === 'merge') {
+            if (!cmd.branchName || !branches.has(cmd.branchName)) return `Command ${i + 1}: merge branch "${cmd.branchName || ''}" does not exist`;
+            if (cmd.branchName === activeBranch) return `Command ${i + 1}: cannot merge branch "${cmd.branchName}" into itself`;
+        }
+    }
+    return null;
+}
+
+// Checks if moving a command from fromIndex to toIndex would produce a valid command list.
+function _ggCanMove(fromIndex, toIndex) {
+    if (!gitGraphModel || !gitGraphModel.commands) return false;
+    const cmds = gitGraphModel.commands.map(c => ({ type: c.type, branchName: c.branchName, id: c.id }));
+    const cmd = cmds.splice(fromIndex, 1)[0];
+    cmds.splice(toIndex, 0, cmd);
+    return _ggValidateCommandList(cmds) === null;
+}
+
 function _ggGetExistingBranches(beforeIndex) {
     if (!gitGraphModel || !gitGraphModel.commands) return ['main'];
     const branches = new Set(['main']);
@@ -697,7 +729,12 @@ function createGitGraphCommand(type, presetInsertIndex) {
     if (!gitGraphModel) return;
     // For checkout/merge, only show branches declared before the insert position
     const insertAt = (typeof presetInsertIndex === 'number') ? (presetInsertIndex - 1) : null;
-    const branches = _ggGetExistingBranches(insertAt);
+    let branches = _ggGetExistingBranches(insertAt);
+    // For merge, exclude the active branch at that position (can't merge a branch into itself)
+    if (type === 'merge' && insertAt !== null) {
+        const active = _ggGetActiveBranchAtIndex(insertAt);
+        branches = branches.filter(b => b !== active);
+    }
     const cmdCount = (gitGraphModel.commands || []).length;
 
     const propertyPanel = document.getElementById('property-panel');
@@ -844,7 +881,17 @@ function editGitGraphCommand(index) {
     }
     if (cmd.type === 'branch' || cmd.type === 'checkout' || cmd.type === 'merge') {
         if (cmd.type === 'checkout' || cmd.type === 'merge') {
-            let branchOpts = branches.map(b => `<option value="${_ggEscapeHtml(b)}" ${b === cmd.branchName ? 'selected' : ''}>${_ggEscapeHtml(b)}</option>`).join('');
+            // For merge, exclude the active branch at this position (can't merge into itself)
+            let filteredBranches = branches;
+            if (cmd.type === 'merge') {
+                const active = _ggGetActiveBranchAtIndex(index);
+                filteredBranches = branches.filter(b => b !== active);
+                // Always keep the command's current branch so it stays pre-selected
+                if (cmd.branchName && !filteredBranches.includes(cmd.branchName)) {
+                    filteredBranches.push(cmd.branchName);
+                }
+            }
+            let branchOpts = filteredBranches.map(b => `<option value="${_ggEscapeHtml(b)}" ${b === cmd.branchName ? 'selected' : ''}>${_ggEscapeHtml(b)}</option>`).join('');
             fieldsHtml += `
                 <div class="property-row"><div class="property-label">Branch</div>
                 <select class="property-select" id="gg-branch">${branchOpts}</select></div>`;
@@ -1035,12 +1082,12 @@ function showGitGraphContextMenu(e) {
             _ggAddCtxItem(menu, 'Paste Below', () => _ggPasteCommand(cmdIndex + 1));
         }
         _ggAddCtxSeparator(menu);
-        if (cmdIndex > 0) {
+        if (cmdIndex > 0 && _ggCanMove(cmdIndex, cmdIndex - 1)) {
             _ggAddCtxItem(menu, 'Move Up', () => {
                 window.chrome.webview.postMessage({ type: 'gg_commandMoved', fromIndex: cmdIndex, toIndex: cmdIndex - 1 });
             });
         }
-        if (cmdIndex < gitGraphModel.commands.length - 1) {
+        if (cmdIndex < gitGraphModel.commands.length - 1 && _ggCanMove(cmdIndex, cmdIndex + 1)) {
             _ggAddCtxItem(menu, 'Move Down', () => {
                 window.chrome.webview.postMessage({ type: 'gg_commandMoved', fromIndex: cmdIndex, toIndex: cmdIndex + 1 });
             });
