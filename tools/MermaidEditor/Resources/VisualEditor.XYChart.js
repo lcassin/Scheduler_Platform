@@ -618,20 +618,23 @@ function deleteXYDataPoint(seriesIndex, dataIndex) {
     if (!s.data || dataIndex >= s.data.length) return;
     var currentVal = s.data[dataIndex];
     var catLabel = (xyModel.xAxisCategories && xyModel.xAxisCategories[dataIndex]) ? xyModel.xAxisCategories[dataIndex] : ('Point ' + (dataIndex + 1));
+    var hasCategories = xyModel.xAxisCategories && xyModel.xAxisCategories.length > 0;
 
     var propertyPanel = document.getElementById('property-panel');
     var propPanelTitle = document.getElementById('property-panel-title');
     propPanelTitle.textContent = 'Delete Data Point';
     var body = document.querySelector('.property-panel-body');
+    var warningHtml = hasCategories ? `<div class="property-row"><div class="property-label" style="width:100%;text-align:center;font-size:11px;opacity:0.6">This will remove the "${_escHtml(catLabel)}" column from all series</div></div>` : '';
     body.innerHTML = `
         <div class="property-row"><div class="property-label" style="width:100%;text-align:center">Delete value ${_escHtml(String(currentVal))} at ${_escHtml(catLabel)}?</div></div>
+        ${warningHtml}
         <div class="property-row" style="display:flex;gap:8px;margin-top:8px">
             <button id="xy-dp-yes" style="flex:1;padding:6px;cursor:pointer;background:#f44336;color:#fff;border:none;border-radius:4px">Delete</button>
             <button id="xy-dp-no" style="flex:1;padding:6px;cursor:pointer;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">Cancel</button>
         </div>
     `;
     document.getElementById('xy-dp-yes').addEventListener('click', function() {
-        postMessage({ type: 'xy_dataPointDeleted', seriesIndex: seriesIndex, dataIndex: dataIndex });
+        postMessage({ type: 'xy_dataPointDeleted', seriesIndex: seriesIndex, dataIndex: dataIndex, syncAll: hasCategories });
         xySelectedDataPoint = null;
         _xyUpdateToolbarSelection();
         propertyPanel.classList.remove('visible');
@@ -644,11 +647,22 @@ function deleteXYDataPoint(seriesIndex, dataIndex) {
 
 function insertXYDataPoint(seriesIndex, dataIndex) {
     if (!xyModel || !xyModel.dataSeries || seriesIndex >= xyModel.dataSeries.length) return;
+    var hasCategories = xyModel.xAxisCategories && xyModel.xAxisCategories.length > 0;
 
     var propertyPanel = document.getElementById('property-panel');
     var propPanelTitle = document.getElementById('property-panel-title');
     propPanelTitle.textContent = 'Insert Data Point';
     var body = document.querySelector('.property-panel-body');
+
+    var categoryHtml = '';
+    if (hasCategories) {
+        categoryHtml = `
+        <div class="property-row">
+            <div class="property-label">Category Name</div>
+            <input class="property-input" id="xy-dp-category" type="text" value="" placeholder="e.g. New Month" />
+        </div>
+        <div class="property-row"><div class="property-label" style="font-size:11px;opacity:0.5;width:100%">A new column will be added to all series</div></div>`;
+    }
 
     body.innerHTML = `
         <div class="property-row">
@@ -659,6 +673,7 @@ function insertXYDataPoint(seriesIndex, dataIndex) {
             <div class="property-label">Position</div>
             <div class="property-label" style="font-weight:normal;opacity:0.7">${dataIndex !== undefined ? 'At index ' + dataIndex : 'At end'}</div>
         </div>
+        ${categoryHtml}
         <div class="property-row">
             <div class="property-label">Value</div>
             <input class="property-input" id="xy-dp-value" type="number" step="any" value="0" />
@@ -670,13 +685,24 @@ function insertXYDataPoint(seriesIndex, dataIndex) {
     document.getElementById('xy-dp-ok').addEventListener('click', function() {
         var val = parseFloat(document.getElementById('xy-dp-value').value);
         if (isNaN(val)) return;
-        var msg = { type: 'xy_dataPointCreated', seriesIndex: seriesIndex, value: val };
+        var catInput = document.getElementById('xy-dp-category');
+        if (catInput && !catInput.value.trim()) {
+            catInput.style.borderColor = '#f44336';
+            catInput.focus();
+            return;
+        }
+        var msg = { type: 'xy_dataPointCreated', seriesIndex: seriesIndex, value: val, syncAll: hasCategories };
         if (dataIndex !== undefined) msg.dataIndex = dataIndex;
+        if (catInput) msg.categoryName = catInput.value.trim();
         postMessage(msg);
         propertyPanel.classList.remove('visible');
     });
     propertyPanel.classList.add('visible');
-    setTimeout(function() { document.getElementById('xy-dp-value').select(); }, 50);
+    if (hasCategories) {
+        setTimeout(function() { document.getElementById('xy-dp-category').focus(); }, 50);
+    } else {
+        setTimeout(function() { document.getElementById('xy-dp-value').select(); }, 50);
+    }
 }
 
 function _xyUpdateToolbarSelection() {
@@ -924,14 +950,18 @@ function _xyPasteSeries(index) {
 
 // ========== XY Chart Context Menu ==========
 
-function _xyAddCtxItem(menu, label, action) {
+function _xyAddCtxItem(menu, label, action, disabled) {
     const item = document.createElement('div');
     item.textContent = label;
     item.className = 'ctx-item';
-    item.style.cssText = 'padding:6px 16px;cursor:pointer;white-space:nowrap;color:var(--context-menu-text)';
-    item.addEventListener('mouseenter', () => item.style.background = 'var(--context-menu-hover)');
-    item.addEventListener('mouseleave', () => item.style.background = 'transparent');
-    item.addEventListener('click', () => { menu.remove(); action(); });
+    if (disabled) {
+        item.style.cssText = 'padding:6px 16px;white-space:nowrap;color:var(--context-menu-text);opacity:0.35;cursor:default';
+    } else {
+        item.style.cssText = 'padding:6px 16px;cursor:pointer;white-space:nowrap;color:var(--context-menu-text)';
+        item.addEventListener('mouseenter', () => item.style.background = 'var(--context-menu-hover)');
+        item.addEventListener('mouseleave', () => item.style.background = 'transparent');
+        item.addEventListener('click', () => { menu.remove(); action(); });
+    }
     menu.appendChild(item);
 }
 
@@ -954,9 +984,10 @@ function showXYChartContextMenu(e, seriesIndex, dataIndex) {
         if (dataIndex !== undefined && dataIndex !== null) {
             selectXYDataPoint(seriesIndex, dataIndex);
             var s = xyModel.dataSeries[seriesIndex];
+            var maxDataLen = Math.max(...xyModel.dataSeries.map(ds => (ds.data || []).length));
             var catLabel = (xyModel.xAxisCategories && xyModel.xAxisCategories[dataIndex]) ? xyModel.xAxisCategories[dataIndex] : ('Point ' + (dataIndex + 1));
             _xyAddCtxItem(menu, 'Edit Value (' + catLabel + ')', () => editXYDataPoint(seriesIndex, dataIndex));
-            _xyAddCtxItem(menu, 'Delete Value', () => deleteXYDataPoint(seriesIndex, dataIndex));
+            _xyAddCtxItem(menu, 'Delete Value', () => deleteXYDataPoint(seriesIndex, dataIndex), maxDataLen <= 1);
             // Toggle No Value option for line series (not first/last)
             if (s.type === 'line' && dataIndex > 0 && s.data && dataIndex < s.data.length - 1) {
                 var nvFlags = s.noValue || [];
@@ -970,35 +1001,39 @@ function showXYChartContextMenu(e, seriesIndex, dataIndex) {
             _xyAddCtxItem(menu, 'Insert Value After', () => insertXYDataPoint(seriesIndex, dataIndex + 1));
             _xyAddCtxItem(menu, 'Append Value', () => insertXYDataPoint(seriesIndex, undefined));
             _xyAddCtxSeparator(menu);
+            // Move Left/Right (swap data point with neighbor across all series)
+            _xyAddCtxItem(menu, 'Move Left', () => {
+                postMessage({ type: 'xy_columnMoved', fromIndex: dataIndex, toIndex: dataIndex - 1 });
+            }, dataIndex <= 0);
+            _xyAddCtxItem(menu, 'Move Right', () => {
+                postMessage({ type: 'xy_columnMoved', fromIndex: dataIndex, toIndex: dataIndex + 1 });
+            }, dataIndex >= maxDataLen - 1);
+            _xyAddCtxSeparator(menu);
         } else {
             selectXYSeries(seriesIndex);
         }
 
         _xyAddCtxItem(menu, 'Edit Series', () => editXYChartSeries(seriesIndex));
-        _xyAddCtxItem(menu, 'Delete Series', () => deleteXYChartSeries(seriesIndex));
+        _xyAddCtxItem(menu, 'Delete Series', () => deleteXYChartSeries(seriesIndex), xyModel.dataSeries && xyModel.dataSeries.length <= 1);
         _xyAddCtxSeparator(menu);
         _xyAddCtxItem(menu, 'Copy Series', () => _xyCopySeries(seriesIndex));
         if (xyClipboard && xyClipboard.type === 'series') {
-            _xyAddCtxItem(menu, 'Paste Above', () => _xyPasteSeries(seriesIndex));
-            _xyAddCtxItem(menu, 'Paste Below', () => _xyPasteSeries(seriesIndex + 1));
+            _xyAddCtxItem(menu, 'Paste Series Above', () => _xyPasteSeries(seriesIndex));
+            _xyAddCtxItem(menu, 'Paste Series Below', () => _xyPasteSeries(seriesIndex + 1));
         }
         _xyAddCtxSeparator(menu);
 
-        // Move Up/Down
-        if (seriesIndex > 0) {
-            _xyAddCtxItem(menu, 'Move Up', () => {
-                postMessage({ type: 'xy_seriesMoved', fromIndex: seriesIndex, toIndex: seriesIndex - 1 });
-            });
-        }
-        if (xyModel.dataSeries && seriesIndex < xyModel.dataSeries.length - 1) {
-            _xyAddCtxItem(menu, 'Move Down', () => {
-                postMessage({ type: 'xy_seriesMoved', fromIndex: seriesIndex, toIndex: seriesIndex + 1 });
-            });
-        }
+        // Move Series Up/Down
+        _xyAddCtxItem(menu, 'Move Series Up', () => {
+            postMessage({ type: 'xy_seriesMoved', fromIndex: seriesIndex, toIndex: seriesIndex - 1 });
+        }, seriesIndex <= 0);
+        _xyAddCtxItem(menu, 'Move Series Down', () => {
+            postMessage({ type: 'xy_seriesMoved', fromIndex: seriesIndex, toIndex: seriesIndex + 1 });
+        }, !xyModel.dataSeries || seriesIndex >= xyModel.dataSeries.length - 1);
 
         _xyAddCtxSeparator(menu);
-        _xyAddCtxItem(menu, 'Insert Above', () => createXYChartSeries(seriesIndex));
-        _xyAddCtxItem(menu, 'Insert Below', () => createXYChartSeries(seriesIndex + 1));
+        _xyAddCtxItem(menu, 'Insert Series Above', () => createXYChartSeries(seriesIndex));
+        _xyAddCtxItem(menu, 'Insert Series Below', () => createXYChartSeries(seriesIndex + 1));
     } else {
         _xyAddCtxItem(menu, 'Add Series', () => createXYChartSeries());
         if (xyClipboard && xyClipboard.type === 'series') {
