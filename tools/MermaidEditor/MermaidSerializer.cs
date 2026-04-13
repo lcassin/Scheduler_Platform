@@ -2188,6 +2188,10 @@ public static class MermaidSerializer
             if (participant.Annotator != ZenUMLAnnotator.None)
             {
                 sb.AppendLine($"{Indent}@{participant.Annotator} {participant.Id}");
+                if (!string.IsNullOrEmpty(participant.Alias))
+                {
+                    sb.AppendLine($"{Indent}{participant.Id} as {participant.Alias}");
+                }
             }
             else if (!string.IsNullOrEmpty(participant.Alias))
             {

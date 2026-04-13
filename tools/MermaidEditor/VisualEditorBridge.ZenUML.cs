@@ -99,7 +99,7 @@ public partial class VisualEditorBridge
     /// Flattens the nested ZenUML elements into a sequential list with depth/nesting info.
     /// This is similar to the Sequence Diagram's FlattenSequenceElements approach.
     /// </summary>
-    private static void FlattenZenUMLElements(List<ZenUMLElement> elements, List<ZenUMLElementDto> result, int depth)
+    private static List<ZenUMLElementDto> FlattenZenUMLElements(List<ZenUMLElement> elements, List<ZenUMLElementDto> result, int depth)
     {
         for (int i = 0; i < elements.Count; i++)
         {
@@ -165,27 +165,16 @@ public partial class VisualEditorBridge
                         Sections = fragment.Sections.Select(s => new ZenUMLFragmentSectionDto
                         {
                             Keyword = s.Keyword,
-                            Label = s.Label
+                            Label = s.Label,
+                            Elements = FlattenZenUMLElements(s.Elements, new List<ZenUMLElementDto>(), depth + 1)
                         }).ToList()
                     };
                     result.Add(fragDto);
-
-                    // Flatten each section's elements
-                    foreach (var section in fragment.Sections)
-                    {
-                        FlattenZenUMLElements(section.Elements, result, depth + 1);
-                    }
-
-                    // Add fragment-end marker
-                    result.Add(new ZenUMLElementDto
-                    {
-                        ElementType = "fragmentEnd",
-                        Depth = depth,
-                        Index = result.Count
-                    });
                     break;
             }
         }
+
+        return result;
     }
 
     // ========== ZenUML Message Handlers ==========
@@ -693,19 +682,21 @@ public partial class VisualEditorBridge
                     {
                         foreach (var sDto in dto.Sections)
                         {
-                            fragment.Sections.Add(new ZenUMLFragmentSection
+                            var section = new ZenUMLFragmentSection
                             {
                                 Keyword = sDto.Keyword,
                                 Label = sDto.Label
-                            });
+                            };
+                            // Restore section elements from the nested array in the DTO
+                            if (sDto.Elements != null)
+                            {
+                                int sIdx = 0;
+                                section.Elements = RestoreZenUMLElements(sDto.Elements, ref sIdx, 0);
+                            }
+                            fragment.Sections.Add(section);
                         }
                     }
                     idx++;
-                    // Restore each section's elements
-                    foreach (var section in fragment.Sections)
-                    {
-                        section.Elements = RestoreZenUMLElements(flatList, ref idx, depth + 1);
-                    }
                     elements.Add(fragment);
                     break;
 
@@ -761,6 +752,7 @@ public partial class VisualEditorBridge
     {
         public string? Keyword { get; set; }
         public string? Label { get; set; }
+        public List<ZenUMLElementDto>? Elements { get; set; }
     }
 }
 

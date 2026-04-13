@@ -3682,13 +3682,13 @@ public static class MermaidParser
             var annotatorMatch = ZenUMLAnnotatorPattern.Match(trimmed);
             if (annotatorMatch.Success)
             {
-                var annotator = annotatorMatch.Groups[1].Value switch
+                var annotator = annotatorMatch.Groups[1].Value.ToLowerInvariant() switch
                 {
-                    "Actor" or "actor" => ZenUMLAnnotator.Actor,
-                    "Boundary" or "boundary" => ZenUMLAnnotator.Boundary,
-                    "Control" or "control" => ZenUMLAnnotator.Control,
-                    "Entity" or "entity" => ZenUMLAnnotator.Entity,
-                    "Database" or "database" => ZenUMLAnnotator.Database,
+                    "actor" => ZenUMLAnnotator.Actor,
+                    "boundary" => ZenUMLAnnotator.Boundary,
+                    "control" => ZenUMLAnnotator.Control,
+                    "entity" => ZenUMLAnnotator.Entity,
+                    "database" => ZenUMLAnnotator.Database,
                     _ => ZenUMLAnnotator.None
                 };
                 var id = annotatorMatch.Groups[2].Value;

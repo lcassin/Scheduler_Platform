@@ -146,9 +146,22 @@
                         }
                         items.push(msgNode);
                     } else if (el.elementType === 'fragment') {
-                        const fragNode = { ...el, flatIndex: i, children: [] };
+                        const fragNode = { ...el, flatIndex: i, sectionChildren: [] };
                         i++;
-                        fragNode.children = buildLevel(el.depth + 1);
+                        // Build children for each section from nested elements
+                        if (el.sections && el.sections.length > 0) {
+                            fragNode.sectionChildren = el.sections.map(sec => {
+                                if (sec.elements && sec.elements.length > 0) {
+                                    return zuBuildElementTree(sec.elements);
+                                }
+                                return [];
+                            });
+                        }
+                        // Also build a flat children array for backward compat with rendering
+                        fragNode.children = [];
+                        fragNode.sectionChildren.forEach(sc => {
+                            fragNode.children = fragNode.children.concat(sc);
+                        });
                         items.push(fragNode);
                     } else if (el.elementType === 'return') {
                         items.push({ ...el, flatIndex: i });
