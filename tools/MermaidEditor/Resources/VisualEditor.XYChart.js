@@ -779,7 +779,10 @@ function editXYChartSeries(index) {
         const valInput = document.getElementById('xy-dlg-values').value;
         const data = valInput.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
         if (data.length === 0) return;
-        postMessage({ type: 'xy_seriesEdited', index, seriesType: type, data, label });
+        const msg = { type: 'xy_seriesEdited', index, seriesType: type, data, label };
+        // Preserve existing NoValue flags so they aren't silently cleared
+        if (s.noValue && s.noValue.length > 0) msg.noValue = s.noValue;
+        postMessage(msg);
         propertyPanel.classList.remove('visible');
     });
     propertyPanel.classList.add('visible');
@@ -904,12 +907,14 @@ function _xyBuildPositionHtml(insertIndex) {
 function _xyCopySeries(index) {
     if (!xyModel || !xyModel.dataSeries || index >= xyModel.dataSeries.length) return;
     const s = xyModel.dataSeries[index];
-    xyClipboard = { type: 'series', data: { seriesType: s.type, data: [...(s.data || [])] } };
+    xyClipboard = { type: 'series', data: { seriesType: s.type, data: [...(s.data || [])], label: s.label || null, noValue: s.noValue ? [...s.noValue] : [] } };
 }
 
 function _xyPasteSeries(index) {
     if (!xyClipboard || xyClipboard.type !== 'series') return;
     const msg = { type: 'xy_seriesCreated', seriesType: xyClipboard.data.seriesType, data: [...xyClipboard.data.data] };
+    if (xyClipboard.data.label) msg.label = xyClipboard.data.label;
+    if (xyClipboard.data.noValue && xyClipboard.data.noValue.length > 0) msg.noValue = [...xyClipboard.data.noValue];
     if (index !== undefined) msg.index = index;
     postMessage(msg);
 }
