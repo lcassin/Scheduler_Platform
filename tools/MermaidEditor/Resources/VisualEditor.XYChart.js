@@ -547,7 +547,7 @@ function editXYDataPoint(seriesIndex, dataIndex) {
         <div class="property-row">
             <label style="display:flex;align-items:center;gap:8px;cursor:${isFirstOrLast ? 'not-allowed' : 'pointer'};opacity:${isFirstOrLast ? '0.4' : '1'}">
                 <input type="checkbox" id="xy-dp-novalue" ${isNoValue ? 'checked' : ''} ${isFirstOrLast ? 'disabled' : ''} style="accent-color:var(--node-selected-stroke);width:16px;height:16px" />
-                <span>No Value (interpolate)</span>
+                <span style="color:var(--input-text)">No Value (interpolate)</span>
             </label>
             ${isFirstOrLast ? '<div style="font-size:11px;opacity:0.5;margin-top:2px">First and last points must have values</div>' : ''}
         </div>`;
