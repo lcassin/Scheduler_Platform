@@ -16,6 +16,7 @@ window.loadXYChart = function(jsonStr) {
         currentDiagramType = 'xyChart';
         xyModel = JSON.parse(jsonStr);
         xySelectedSeries = null;
+        xySelectedDataPoint = null;
         editorCanvasZoom = 1;
         updateToolbarForDiagramType();
         renderXYChart();
@@ -714,6 +715,7 @@ function deleteXYChartSeries(index) {
     document.getElementById('xy-dlg-yes').addEventListener('click', function() {
         postMessage({ type: 'xy_seriesDeleted', index: idx });
         xySelectedSeries = null;
+        xySelectedDataPoint = null;
         _xyUpdateToolbarSelection();
         propertyPanel.classList.remove('visible');
     });

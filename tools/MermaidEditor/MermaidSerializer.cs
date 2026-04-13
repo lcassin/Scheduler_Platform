@@ -2308,6 +2308,10 @@ public static class MermaidSerializer
                     WriteZenUMLElements(sb, msg.NestedElements, indent + Indent);
                     sb.AppendLine($"{indent}}}");
                 }
+                else if (msg.HasBlock)
+                {
+                    sb.AppendLine(" { }");
+                }
                 else
                 {
                     sb.AppendLine();
@@ -2471,10 +2475,17 @@ public static class MermaidSerializer
             sb.AppendLine($"{Indent}y-axis \"{model.YAxisTitle}\"");
         }
 
-        // Write data series
+        // Write data series — pad shorter series with 0s to match longest series length
+        // (Mermaid requires all series to have the same number of data points when x-axis categories are defined)
+        var maxDataPoints = model.DataSeries.Count > 0 ? model.DataSeries.Max(s => s.Data.Count) : 0;
+        if (model.XAxisCategories != null && model.XAxisCategories.Count > maxDataPoints)
+            maxDataPoints = model.XAxisCategories.Count;
         foreach (var series in model.DataSeries)
         {
-            var values = string.Join(", ", series.Data.Select(v => v.ToString("G", CultureInfo.InvariantCulture)));
+            var data = series.Data.ToList();
+            while (data.Count < maxDataPoints)
+                data.Add(0);
+            var values = string.Join(", ", data.Select(v => v.ToString("G", CultureInfo.InvariantCulture)));
             sb.AppendLine($"{Indent}{series.Type} [{values}]");
         }
 

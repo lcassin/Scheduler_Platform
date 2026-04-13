@@ -331,10 +331,22 @@ public partial class VisualEditorBridge
     private void HandleZenUMLMessageEdited(JsonElement root)
     {
         if (_zenUMLModel == null) return;
-        var elementIndex = root.GetProperty("elementIndex").GetInt32();
 
-        if (elementIndex < 0 || elementIndex >= _zenUMLModel.Elements.Count) return;
-        if (_zenUMLModel.Elements[elementIndex] is not ZenUMLMessage msg) return;
+        ZenUMLMessage? msg = null;
+        var path = ParseElementPath(root);
+        if (path != null)
+        {
+            var (element, _, _) = FindElementByPath(path);
+            msg = element as ZenUMLMessage;
+        }
+        else if (root.TryGetProperty("elementIndex", out var eiProp))
+        {
+            // Legacy fallback for top-level elements
+            var elementIndex = eiProp.GetInt32();
+            if (elementIndex >= 0 && elementIndex < _zenUMLModel.Elements.Count)
+                msg = _zenUMLModel.Elements[elementIndex] as ZenUMLMessage;
+        }
+        if (msg == null) return;
 
         PushUndo();
         if (root.TryGetProperty("fromId", out var fProp))
@@ -364,12 +376,32 @@ public partial class VisualEditorBridge
     private void HandleZenUMLMessageDeleted(JsonElement root)
     {
         if (_zenUMLModel == null) return;
-        var elementIndex = root.GetProperty("elementIndex").GetInt32();
 
-        if (elementIndex < 0 || elementIndex >= _zenUMLModel.Elements.Count) return;
+        List<ZenUMLElement>? list = null;
+        int idx = -1;
+        var path = ParseElementPath(root);
+        if (path != null)
+        {
+            var (element, containingList, indexInList) = FindElementByPath(path);
+            if (element != null && containingList != null)
+            {
+                list = containingList;
+                idx = indexInList;
+            }
+        }
+        else if (root.TryGetProperty("elementIndex", out var eiProp))
+        {
+            var elementIndex = eiProp.GetInt32();
+            if (elementIndex >= 0 && elementIndex < _zenUMLModel.Elements.Count)
+            {
+                list = _zenUMLModel.Elements;
+                idx = elementIndex;
+            }
+        }
+        if (list == null || idx < 0) return;
 
         PushUndo();
-        _zenUMLModel.Elements.RemoveAt(elementIndex);
+        list.RemoveAt(idx);
         RaiseZenUMLModelChanged("zu_messageDeleted");
     }
 
@@ -397,10 +429,21 @@ public partial class VisualEditorBridge
     private void HandleZenUMLReturnEdited(JsonElement root)
     {
         if (_zenUMLModel == null) return;
-        var elementIndex = root.GetProperty("elementIndex").GetInt32();
 
-        if (elementIndex < 0 || elementIndex >= _zenUMLModel.Elements.Count) return;
-        if (_zenUMLModel.Elements[elementIndex] is not ZenUMLReturn ret) return;
+        ZenUMLReturn? ret = null;
+        var path = ParseElementPath(root);
+        if (path != null)
+        {
+            var (element, _, _) = FindElementByPath(path);
+            ret = element as ZenUMLReturn;
+        }
+        else if (root.TryGetProperty("elementIndex", out var eiProp))
+        {
+            var elementIndex = eiProp.GetInt32();
+            if (elementIndex >= 0 && elementIndex < _zenUMLModel.Elements.Count)
+                ret = _zenUMLModel.Elements[elementIndex] as ZenUMLReturn;
+        }
+        if (ret == null) return;
 
         PushUndo();
         if (root.TryGetProperty("value", out var vProp))
@@ -412,12 +455,32 @@ public partial class VisualEditorBridge
     private void HandleZenUMLReturnDeleted(JsonElement root)
     {
         if (_zenUMLModel == null) return;
-        var elementIndex = root.GetProperty("elementIndex").GetInt32();
 
-        if (elementIndex < 0 || elementIndex >= _zenUMLModel.Elements.Count) return;
+        List<ZenUMLElement>? list = null;
+        int idx = -1;
+        var path = ParseElementPath(root);
+        if (path != null)
+        {
+            var (element, containingList, indexInList) = FindElementByPath(path);
+            if (element != null && containingList != null)
+            {
+                list = containingList;
+                idx = indexInList;
+            }
+        }
+        else if (root.TryGetProperty("elementIndex", out var eiProp))
+        {
+            var elementIndex = eiProp.GetInt32();
+            if (elementIndex >= 0 && elementIndex < _zenUMLModel.Elements.Count)
+            {
+                list = _zenUMLModel.Elements;
+                idx = elementIndex;
+            }
+        }
+        if (list == null || idx < 0) return;
 
         PushUndo();
-        _zenUMLModel.Elements.RemoveAt(elementIndex);
+        list.RemoveAt(idx);
         RaiseZenUMLModelChanged("zu_returnDeleted");
     }
 
@@ -471,10 +534,21 @@ public partial class VisualEditorBridge
     private void HandleZenUMLFragmentEdited(JsonElement root)
     {
         if (_zenUMLModel == null) return;
-        var elementIndex = root.GetProperty("elementIndex").GetInt32();
 
-        if (elementIndex < 0 || elementIndex >= _zenUMLModel.Elements.Count) return;
-        if (_zenUMLModel.Elements[elementIndex] is not ZenUMLFragment frag) return;
+        ZenUMLFragment? frag = null;
+        var path = ParseElementPath(root);
+        if (path != null)
+        {
+            var (element, _, _) = FindElementByPath(path);
+            frag = element as ZenUMLFragment;
+        }
+        else if (root.TryGetProperty("elementIndex", out var eiProp))
+        {
+            var elementIndex = eiProp.GetInt32();
+            if (elementIndex >= 0 && elementIndex < _zenUMLModel.Elements.Count)
+                frag = _zenUMLModel.Elements[elementIndex] as ZenUMLFragment;
+        }
+        if (frag == null) return;
 
         PushUndo();
         if (root.TryGetProperty("fragmentType", out var ftProp))
@@ -497,12 +571,32 @@ public partial class VisualEditorBridge
     private void HandleZenUMLFragmentDeleted(JsonElement root)
     {
         if (_zenUMLModel == null) return;
-        var elementIndex = root.GetProperty("elementIndex").GetInt32();
 
-        if (elementIndex < 0 || elementIndex >= _zenUMLModel.Elements.Count) return;
+        List<ZenUMLElement>? list = null;
+        int idx = -1;
+        var path = ParseElementPath(root);
+        if (path != null)
+        {
+            var (element, containingList, indexInList) = FindElementByPath(path);
+            if (element != null && containingList != null)
+            {
+                list = containingList;
+                idx = indexInList;
+            }
+        }
+        else if (root.TryGetProperty("elementIndex", out var eiProp))
+        {
+            var elementIndex = eiProp.GetInt32();
+            if (elementIndex >= 0 && elementIndex < _zenUMLModel.Elements.Count)
+            {
+                list = _zenUMLModel.Elements;
+                idx = elementIndex;
+            }
+        }
+        if (list == null || idx < 0) return;
 
         PushUndo();
-        _zenUMLModel.Elements.RemoveAt(elementIndex);
+        list.RemoveAt(idx);
         RaiseZenUMLModelChanged("zu_fragmentDeleted");
     }
 
@@ -529,6 +623,66 @@ public partial class VisualEditorBridge
         if (root.TryGetProperty("title", out var tProp))
             _zenUMLModel.Title = tProp.ValueKind == JsonValueKind.Null ? null : tProp.GetString();
         RaiseZenUMLModelChanged("zu_settingsChanged");
+    }
+
+    // ========== Path-Based Element Traversal ==========
+
+    /// <summary>
+    /// Parses the elementPath JSON array from the root and returns an int array.
+    /// </summary>
+    private static int[]? ParseElementPath(JsonElement root)
+    {
+        if (!root.TryGetProperty("elementPath", out var pathProp) || pathProp.ValueKind != JsonValueKind.Array)
+            return null;
+        var path = new int[pathProp.GetArrayLength()];
+        int i = 0;
+        foreach (var item in pathProp.EnumerateArray())
+        {
+            path[i++] = item.GetInt32();
+        }
+        return path.Length > 0 ? path : null;
+    }
+
+    /// <summary>
+    /// Traverses the model tree using a path array and returns the element and its parent list.
+    /// path[0] = index in top-level Elements, path[1] = index in that element's NestedElements, etc.
+    /// Returns (element, containingList) or (null, null) if path is invalid.
+    /// </summary>
+    private (ZenUMLElement? element, List<ZenUMLElement>? containingList, int indexInList) FindElementByPath(int[] path)
+    {
+        if (_zenUMLModel == null || path.Length == 0)
+            return (null, null, -1);
+
+        var currentList = _zenUMLModel.Elements;
+        for (int i = 0; i < path.Length; i++)
+        {
+            int idx = path[i];
+            if (idx < 0 || idx >= currentList.Count)
+                return (null, null, -1);
+
+            if (i == path.Length - 1)
+            {
+                // This is the target element
+                return (currentList[idx], currentList, idx);
+            }
+
+            // Navigate deeper into nested elements
+            var element = currentList[idx];
+            if (element is ZenUMLMessage msg && msg.HasBlock)
+            {
+                currentList = msg.NestedElements;
+            }
+            else if (element is ZenUMLFragment frag && frag.Sections.Count > 0)
+            {
+                // For fragments, nested elements are in the first section
+                currentList = frag.Sections[0].Elements;
+            }
+            else
+            {
+                return (null, null, -1);
+            }
+        }
+        return (null, null, -1);
     }
 
     // ========== Helper Methods ==========

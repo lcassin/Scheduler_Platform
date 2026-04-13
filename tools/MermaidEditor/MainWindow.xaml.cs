@@ -9720,6 +9720,7 @@ Console.WriteLine(""Hello, World!"");
         _currentQuadrantChartModel = null;
         _currentGitGraphModel = null;
         _currentZenUMLModel = null;
+        _currentXYChartModel = null;
         
         // Switch to new document
         _activeDocument = doc;

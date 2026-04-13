@@ -1066,8 +1066,8 @@
             const el = zuDiagram.elements[flatIdx];
             if (!el || el.elementType !== 'message') return;
 
-            // Find the real element index (top-level only) for editing
-            const realIdx = zuFindRealElementIndex(flatIdx);
+            // Find the path to this element in the nested model tree
+            const elementPath = zuFindElementPath(flatIdx);
 
             propPanelTitle.textContent = 'ZenUML Message';
             const body = document.querySelector('.property-panel-body');
@@ -1093,8 +1093,8 @@
                     <select class="property-select" id="zu-msg-type">
                         <option value="Sync" ${(el.messageType || 'Sync') === 'Sync' ? 'selected' : ''}>Sync (solid arrow)</option>
                         <option value="Async" ${el.messageType === 'Async' ? 'selected' : ''}>Async (open arrow)</option>
-                        <option value="Reply" ${el.messageType === 'Reply' ? 'selected' : ''}>Reply (dotted)</option>
                         <option value="Creation" ${el.messageType === 'Creation' ? 'selected' : ''}>Creation (new)</option>
+                        <option value="SelfCall" ${el.messageType === 'SelfCall' ? 'selected' : ''}>Self Call</option>
                     </select>
                 </div>
                 <div class="property-row">
@@ -1109,22 +1109,22 @@
             `;
 
             document.getElementById('zu-msg-from').addEventListener('change', function() {
-                postMessage({ type: 'zu_messageEdited', elementIndex: realIdx, fromId: this.value });
+                postMessage({ type: 'zu_messageEdited', elementPath: elementPath, fromId: this.value });
             });
             document.getElementById('zu-msg-to').addEventListener('change', function() {
-                postMessage({ type: 'zu_messageEdited', elementIndex: realIdx, toId: this.value });
+                postMessage({ type: 'zu_messageEdited', elementPath: elementPath, toId: this.value });
             });
             document.getElementById('zu-msg-text').addEventListener('change', function() {
-                postMessage({ type: 'zu_messageEdited', elementIndex: realIdx, text: this.value });
+                postMessage({ type: 'zu_messageEdited', elementPath: elementPath, text: this.value });
             });
             document.getElementById('zu-msg-type').addEventListener('change', function() {
-                postMessage({ type: 'zu_messageEdited', elementIndex: realIdx, messageType: this.value });
+                postMessage({ type: 'zu_messageEdited', elementPath: elementPath, messageType: this.value });
             });
             document.getElementById('zu-msg-block').addEventListener('change', function() {
-                postMessage({ type: 'zu_messageEdited', elementIndex: realIdx, hasBlock: this.checked });
+                postMessage({ type: 'zu_messageEdited', elementPath: elementPath, hasBlock: this.checked });
             });
             document.getElementById('zu-msg-delete').addEventListener('click', function() {
-                postMessage({ type: 'zu_messageDeleted', elementIndex: realIdx });
+                postMessage({ type: 'zu_messageDeleted', elementPath: elementPath });
                 zuSelectedElementIdx = -1;
                 propertyPanel.classList.remove('visible');
             });
@@ -1137,7 +1137,7 @@
             const el = zuDiagram.elements[flatIdx];
             if (!el || el.elementType !== 'return') return;
 
-            const realIdx = zuFindRealElementIndex(flatIdx);
+            const elementPath = zuFindElementPath(flatIdx);
 
             propPanelTitle.textContent = 'ZenUML Return';
             const body = document.querySelector('.property-panel-body');
@@ -1152,10 +1152,10 @@
             `;
 
             document.getElementById('zu-ret-value').addEventListener('change', function() {
-                postMessage({ type: 'zu_returnEdited', elementIndex: realIdx, value: this.value });
+                postMessage({ type: 'zu_returnEdited', elementPath: elementPath, value: this.value });
             });
             document.getElementById('zu-ret-delete').addEventListener('click', function() {
-                postMessage({ type: 'zu_returnDeleted', elementIndex: realIdx });
+                postMessage({ type: 'zu_returnDeleted', elementPath: elementPath });
                 zuSelectedElementIdx = -1;
                 propertyPanel.classList.remove('visible');
             });
@@ -1168,7 +1168,7 @@
             const el = zuDiagram.elements[flatIdx];
             if (!el || el.elementType !== 'fragment') return;
 
-            const realIdx = zuFindRealElementIndex(flatIdx);
+            const elementPath = zuFindElementPath(flatIdx);
             const fragType = (el.fragmentType || 'If').toLowerCase();
             const fragTypes = ['if', 'while', 'for', 'forEach', 'loop', 'opt', 'par', 'try'];
 
@@ -1191,13 +1191,13 @@
             `;
 
             document.getElementById('zu-frag-type').addEventListener('change', function() {
-                postMessage({ type: 'zu_fragmentEdited', elementIndex: realIdx, fragmentType: this.value });
+                postMessage({ type: 'zu_fragmentEdited', elementPath: elementPath, fragmentType: this.value });
             });
             document.getElementById('zu-frag-label').addEventListener('change', function() {
-                postMessage({ type: 'zu_fragmentEdited', elementIndex: realIdx, label: this.value });
+                postMessage({ type: 'zu_fragmentEdited', elementPath: elementPath, label: this.value });
             });
             document.getElementById('zu-frag-delete').addEventListener('click', function() {
-                postMessage({ type: 'zu_fragmentDeleted', elementIndex: realIdx });
+                postMessage({ type: 'zu_fragmentDeleted', elementPath: elementPath });
                 zuSelectedElementIdx = -1;
                 propertyPanel.classList.remove('visible');
             });
@@ -1205,31 +1205,42 @@
             propertyPanel.classList.add('visible');
         }
 
-        // Find real element index from flat index
-        // The flat list has blockEnd/fragmentEnd markers that don't correspond to real elements
-        // We need to find the actual top-level element index for editing operations
-        function zuFindRealElementIndex(flatIdx) {
-            // The flat elements array corresponds directly to the C# bridge's flat list
-            // The bridge uses elementIndex which is the index in the model's top-level Elements list
-            // Since the flat list preserves order, we count only top-level elements (depth 0)
-            // that are not end markers
-            if (!zuDiagram || flatIdx < 0) return -1;
+        // Build a path array from a flat index to address nested elements.
+        // Returns an array like [2, 0] meaning "top-level element 2, nested element 0".
+        // The C# bridge uses this path to traverse the model tree.
+        function zuFindElementPath(flatIdx) {
+            if (!zuDiagram || flatIdx < 0) return [];
 
-            let realIdx = 0;
-            for (let i = 0; i < flatIdx && i < zuDiagram.elements.length; i++) {
+            // Walk the flat array, tracking indices at each depth level
+            var depthCounters = [0]; // index counter for each depth level
+            for (let i = 0; i < zuDiagram.elements.length; i++) {
                 const el = zuDiagram.elements[i];
-                if (el.depth === 0 && el.elementType !== 'blockEnd' && el.elementType !== 'fragmentEnd') {
-                    realIdx++;
+                if (el.elementType === 'blockEnd' || el.elementType === 'fragmentEnd') {
+                    // Pop back up a level
+                    if (depthCounters.length > 1) depthCounters.pop();
+                    continue;
+                }
+
+                // Ensure we have a counter for this depth
+                while (depthCounters.length <= el.depth) depthCounters.push(0);
+                // Trim if we jumped back up
+                while (depthCounters.length > el.depth + 1) depthCounters.pop();
+
+                if (i === flatIdx) {
+                    // Build path from depth counters
+                    return depthCounters.slice();
+                }
+
+                // Increment counter at this depth
+                depthCounters[el.depth]++;
+
+                // If this element has a block (children), prepare the next depth level
+                if (el.hasBlock && el.elementType === 'message') {
+                    while (depthCounters.length <= el.depth + 1) depthCounters.push(0);
+                    depthCounters[el.depth + 1] = 0;
                 }
             }
-            // If the target element itself is depth 0, return realIdx
-            // Otherwise it's a nested element, return the parent's real index
-            const target = zuDiagram.elements[flatIdx];
-            if (target && target.depth === 0) {
-                return realIdx;
-            }
-            // For nested elements, find parent
-            return Math.max(0, realIdx - 1);
+            return [];
         }
 
         // ===== ZenUML Context Menu =====
