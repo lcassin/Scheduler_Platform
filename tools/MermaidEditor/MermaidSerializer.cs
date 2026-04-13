@@ -2480,8 +2480,26 @@ public static class MermaidSerializer
         var maxDataPoints = model.DataSeries.Count > 0 ? model.DataSeries.Max(s => s.Data.Count) : 0;
         if (model.XAxisCategories != null && model.XAxisCategories.Count > maxDataPoints)
             maxDataPoints = model.XAxisCategories.Count;
-        foreach (var series in model.DataSeries)
+
+        // Build output order: bar series sorted by sum descending (largest first = drawn behind,
+        // smallest last = rendered on top and visible), then line series in original order.
+        // Mermaid overlays bar series rather than grouping side-by-side, so this ensures
+        // smaller bar series aren't hidden behind larger ones.
+        var barIndices = new List<(int idx, double sum)>();
+        var lineIndices = new List<int>();
+        for (int i = 0; i < model.DataSeries.Count; i++)
         {
+            if (model.DataSeries[i].Type == "bar")
+                barIndices.Add((i, model.DataSeries[i].Data.Sum()));
+            else
+                lineIndices.Add(i);
+        }
+        barIndices.Sort((a, b) => b.sum.CompareTo(a.sum));
+        var outputOrder = barIndices.Select(b => b.idx).Concat(lineIndices).ToList();
+
+        foreach (var modelIdx in outputOrder)
+        {
+            var series = model.DataSeries[modelIdx];
             var data = series.Data.ToList();
             var noValue = series.NoValue.ToList();
 
@@ -2509,20 +2527,21 @@ public static class MermaidSerializer
         }
 
         // Write visual editor metadata as comment annotations (labels, noValue flags)
+        // Indices here reference the OUTPUT order (after bar reordering)
         var hasMetadata = false;
-        for (int si = 0; si < model.DataSeries.Count; si++)
+        for (int outIdx = 0; outIdx < outputOrder.Count; outIdx++)
         {
-            var series = model.DataSeries[si];
+            var series = model.DataSeries[outputOrder[outIdx]];
             if (!string.IsNullOrWhiteSpace(series.Label))
             {
                 if (!hasMetadata) { sb.AppendLine(); hasMetadata = true; }
-                sb.AppendLine($"{Indent}%% @label:{si}={series.Label}");
+                sb.AppendLine($"{Indent}%% @label:{outIdx}={series.Label}");
             }
             if (series.Type == "line" && series.NoValue.Any(v => v))
             {
                 if (!hasMetadata) { sb.AppendLine(); hasMetadata = true; }
                 var flags = string.Join(",", series.NoValue.Select(v => v ? "1" : "0"));
-                sb.AppendLine($"{Indent}%% @novalue:{si}={flags}");
+                sb.AppendLine($"{Indent}%% @novalue:{outIdx}={flags}");
             }
         }
 

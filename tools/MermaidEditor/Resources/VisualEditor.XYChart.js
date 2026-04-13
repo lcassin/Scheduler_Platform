@@ -252,13 +252,16 @@ function renderXYChart() {
                     if (di >= numPoints) return;
                     const barHeight = ((val - dataMin) / dataRange) * chartHeight;
                     const x = chartLeft + groupWidth * di + barPadding + singleBarWidth * barIdx;
-                    const y = chartBottom - barHeight;
+                    // Ensure zero-value bars still have a minimum clickable height
+                    const minBarHeight = 4;
+                    const displayHeight = Math.max(minBarHeight, barHeight);
+                    const y = chartBottom - displayHeight;
 
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', x);
                     rect.setAttribute('y', y);
                     rect.setAttribute('width', Math.max(1, singleBarWidth - 1));
-                    rect.setAttribute('height', Math.max(0, barHeight));
+                    rect.setAttribute('height', displayHeight);
                     rect.setAttribute('fill', color);
                     rect.setAttribute('opacity', isSelected ? '1' : '0.8');
                     if (isSelected) {
@@ -543,7 +546,7 @@ function editXYDataPoint(seriesIndex, dataIndex) {
         noValueHtml = `
         <div class="property-row">
             <label style="display:flex;align-items:center;gap:8px;cursor:${isFirstOrLast ? 'not-allowed' : 'pointer'};opacity:${isFirstOrLast ? '0.4' : '1'}">
-                <input type="checkbox" id="xy-dp-novalue" ${isNoValue ? 'checked' : ''} ${isFirstOrLast ? 'disabled' : ''} />
+                <input type="checkbox" id="xy-dp-novalue" ${isNoValue ? 'checked' : ''} ${isFirstOrLast ? 'disabled' : ''} style="accent-color:var(--node-selected-stroke);width:16px;height:16px" />
                 <span>No Value (interpolate)</span>
             </label>
             ${isFirstOrLast ? '<div style="font-size:11px;opacity:0.5;margin-top:2px">First and last points must have values</div>' : ''}
