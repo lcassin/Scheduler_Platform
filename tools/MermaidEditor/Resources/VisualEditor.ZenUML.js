@@ -401,7 +401,7 @@
             let currentY = ZU_LIFELINE_START_Y + 30;
             const activationStacks = {}; // participantId -> [{startY}]
 
-            function renderTree(items, indent) {
+            function renderTree(items, indent, parentMsg) {
                 items.forEach(item => {
                     if (item.elementType === 'message') {
                         zuRenderMessage(item, currentY, indent);
@@ -413,7 +413,7 @@
                         }
                         currentY += ZU_MESSAGE_SPACING;
                         if (item.children && item.children.length > 0) {
-                            renderTree(item.children, indent + 1);
+                            renderTree(item.children, indent + 1, item);
                             // Close activation
                             if (item.hasBlock) {
                                 const stack = activationStacks[toId];
@@ -425,7 +425,7 @@
                             currentY += 15; // block closing space
                         }
                     } else if (item.elementType === 'return') {
-                        zuRenderReturn(item, currentY);
+                        zuRenderReturn(item, currentY, parentMsg);
                         currentY += 35;
                     } else if (item.elementType === 'fragment') {
                         const fragStartY = currentY;
@@ -441,7 +441,7 @@
                     }
                 });
             }
-            renderTree(tree, 0);
+            renderTree(tree, 0, null);
 
             // Close remaining activations
             Object.keys(activationStacks).forEach(pid => {
@@ -636,30 +636,33 @@
                 }
             }
 
-            // Block indicator (curly brace) for messages with nested blocks
-            if (item.hasBlock) {
-                const blockIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                blockIndicator.setAttribute('x', toX + (isSelfMessage ? 5 : 15));
-                blockIndicator.setAttribute('y', y + 5);
-                blockIndicator.setAttribute('font-size', '12');
-                blockIndicator.setAttribute('fill', 'var(--subgraph-text)');
-                blockIndicator.setAttribute('pointer-events', 'none');
-                blockIndicator.textContent = '{';
-                msgGroup.appendChild(blockIndicator);
-            }
-
             edgesLayer.appendChild(msgGroup);
         }
 
-        function zuRenderReturn(item, absY) {
+        function zuRenderReturn(item, absY, parentMsg) {
             if (!zuDiagram) return;
             const y = absY;
             const isSelected = (zuSelectedElementIdx === item.flatIndex);
 
-            // Position return across the diagram (centered)
+            // Position return between the correct caller and callee from the parent message
             const participants = zuDiagram.participants;
-            const startX = participants.length > 0 ? zuGetParticipantX(0) : ZU_LEFT_MARGIN;
-            const endX = participants.length > 1 ? zuGetParticipantX(participants.length - 1) : startX + 100;
+            var startX, endX;
+            if (parentMsg && parentMsg.fromId && parentMsg.toId) {
+                // Return goes from callee (toId) back to caller (fromId)
+                const calleeIdx = zuGetParticipantIndex(parentMsg.toId);
+                const callerIdx = zuGetParticipantIndex(parentMsg.fromId);
+                if (calleeIdx >= 0 && callerIdx >= 0) {
+                    startX = zuGetParticipantX(calleeIdx);
+                    endX = zuGetParticipantX(callerIdx);
+                } else {
+                    startX = participants.length > 0 ? zuGetParticipantX(0) : ZU_LEFT_MARGIN;
+                    endX = participants.length > 1 ? zuGetParticipantX(participants.length - 1) : startX + 100;
+                }
+            } else {
+                // Fallback: span the diagram if no parent context
+                startX = participants.length > 0 ? zuGetParticipantX(0) : ZU_LEFT_MARGIN;
+                endX = participants.length > 1 ? zuGetParticipantX(participants.length - 1) : startX + 100;
+            }
             const midX = (startX + endX) / 2;
 
             const retG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -698,11 +701,21 @@
             setTextWithLineBreaks(text, labelText);
             retG.appendChild(text);
 
+            // Arrowhead pointing toward the endX (caller)
+            const dir = endX > startX ? 1 : -1;
+            const arrowPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            arrowPoly.setAttribute('points', `${endX - dir * 8},${y - 4} ${endX},${y} ${endX - dir * 8},${y + 4}`);
+            arrowPoly.setAttribute('fill', isSelected ? 'var(--node-selected-stroke)' : 'var(--edge-color)');
+            arrowPoly.setAttribute('pointer-events', 'none');
+            retG.appendChild(arrowPoly);
+
             // Hit area
+            const hitMinX = Math.min(startX, endX);
+            const hitWidth = Math.abs(endX - startX) || 100;
             const hitRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            hitRect.setAttribute('x', startX);
+            hitRect.setAttribute('x', hitMinX);
             hitRect.setAttribute('y', y - 20);
-            hitRect.setAttribute('width', endX - startX);
+            hitRect.setAttribute('width', hitWidth);
             hitRect.setAttribute('height', 28);
             hitRect.setAttribute('fill', 'transparent');
             hitRect.setAttribute('pointer-events', 'all');
