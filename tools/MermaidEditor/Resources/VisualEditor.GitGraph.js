@@ -3,6 +3,11 @@
 // Git commit history with branches, merges, tags, cherry-picks
 // ============================================================
 
+// ========== GitGraph Utilities ==========
+function _ggEscapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // ========== GitGraph State ==========
 let gitGraphModel = null;
 let ggSelectedCommand = null; // index or null
@@ -106,7 +111,7 @@ function renderGitGraphDiagram() {
     const labelStartX = padding + graphWidth + labelLeftOffset;
     const totalWidth = Math.max(700, labelStartX + 400);
     const titleHeight = gitGraphModel.title ? 40 : 0;
-    const totalHeight = padding + titleHeight + commands.length * rowHeight + 80;
+    const totalHeight = padding + titleHeight + commands.length * rowHeight + 94;
 
     // Create SVG
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -670,7 +675,7 @@ function _ggBuildPositionHtml(cmdCount) {
     for (let i = 0; i < cmdCount; i++) {
         const desc = _ggFormatCommandLabel(cmds[i]);
         const short = desc.length > 40 ? desc.substring(0, 39) + '\u2026' : desc;
-        html += `<option value="${i + 1}">Before: ${short}</option>`;
+        html += `<option value="${i + 1}">Before: ${_ggEscapeHtml(short)}</option>`;
     }
     html += '</select></div>';
     return html;
@@ -714,12 +719,12 @@ function createGitGraphCommand(type) {
             <div class="property-row"><div class="property-label">Order (optional)</div>
             <input class="property-input" id="gg-order" type="number" /></div>`;
     } else if (type === 'checkout') {
-        let branchOpts = branches.map(b => `<option value="${b}">${b}</option>`).join('');
+        let branchOpts = branches.map(b => `<option value="${_ggEscapeHtml(b)}">${_ggEscapeHtml(b)}</option>`).join('');
         fieldsHtml = `
             <div class="property-row"><div class="property-label">Switch to Branch</div>
             <select class="property-select" id="gg-branch">${branchOpts}</select></div>`;
     } else if (type === 'merge') {
-        let branchOpts = branches.map(b => `<option value="${b}">${b}</option>`).join('');
+        let branchOpts = branches.map(b => `<option value="${_ggEscapeHtml(b)}">${_ggEscapeHtml(b)}</option>`).join('');
         fieldsHtml = `
             <div class="property-row"><div class="property-label">Merge from Branch</div>
             <select class="property-select" id="gg-branch">${branchOpts}</select></div>
@@ -813,9 +818,9 @@ function editGitGraphCommand(index) {
     if (cmd.type === 'commit' || cmd.type === 'merge' || cmd.type === 'cherry-pick') {
         fieldsHtml += `
             <div class="property-row"><div class="property-label">ID</div>
-            <input class="property-input" id="gg-id" value="${cmd.id || ''}" /></div>
+            <input class="property-input" id="gg-id" value="${_ggEscapeHtml(cmd.id || '')}" /></div>
             <div class="property-row"><div class="property-label">Tag</div>
-            <input class="property-input" id="gg-tag" value="${cmd.tag || ''}" /></div>`;
+            <input class="property-input" id="gg-tag" value="${_ggEscapeHtml(cmd.tag || '')}" /></div>`;
     }
     if (cmd.type === 'commit' || cmd.type === 'merge') {
         fieldsHtml += `
@@ -828,14 +833,14 @@ function editGitGraphCommand(index) {
     }
     if (cmd.type === 'branch' || cmd.type === 'checkout' || cmd.type === 'merge') {
         if (cmd.type === 'checkout' || cmd.type === 'merge') {
-            let branchOpts = branches.map(b => `<option value="${b}" ${b === cmd.branchName ? 'selected' : ''}>${b}</option>`).join('');
+            let branchOpts = branches.map(b => `<option value="${_ggEscapeHtml(b)}" ${b === cmd.branchName ? 'selected' : ''}>${_ggEscapeHtml(b)}</option>`).join('');
             fieldsHtml += `
                 <div class="property-row"><div class="property-label">Branch</div>
                 <select class="property-select" id="gg-branch">${branchOpts}</select></div>`;
         } else {
             fieldsHtml += `
                 <div class="property-row"><div class="property-label">Branch Name</div>
-                <input class="property-input" id="gg-branch" value="${cmd.branchName || ''}" /></div>`;
+                <input class="property-input" id="gg-branch" value="${_ggEscapeHtml(cmd.branchName || '')}" /></div>`;
         }
     }
     if (cmd.type === 'branch') {
@@ -846,7 +851,7 @@ function editGitGraphCommand(index) {
     if (cmd.type === 'cherry-pick') {
         fieldsHtml += `
             <div class="property-row"><div class="property-label">Parent</div>
-            <input class="property-input" id="gg-parent" value="${cmd.parent || ''}" /></div>`;
+            <input class="property-input" id="gg-parent" value="${_ggEscapeHtml(cmd.parent || '')}" /></div>`;
     }
 
     body.innerHTML = `
@@ -904,7 +909,7 @@ function deleteGitGraphCommand(index) {
     body.innerHTML = `
         <div class="property-row">
             <p style="margin:0">Delete command ${index + 1}?</p>
-            <p style="font-family:monospace;font-size:12px;opacity:0.7;padding:8px;margin:8px 0;background:var(--input-bg);border-radius:4px">${label}</p>
+            <p style="font-family:monospace;font-size:12px;opacity:0.7;padding:8px;margin:8px 0;background:var(--input-bg);border-radius:4px">${_ggEscapeHtml(label)}</p>
         </div>
         <div class="property-row" style="margin-top:8px">
             <button id="gg-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:#d32f2f;color:#fff;border:none;border-radius:4px">Delete</button>
@@ -927,7 +932,7 @@ function editGitGraphSettings() {
 
     body.innerHTML = `
         <div class="property-row"><div class="property-label">Title (optional)</div>
-        <input class="property-input" id="gg-title" value="${gitGraphModel.title || ''}" /></div>
+        <input class="property-input" id="gg-title" value="${_ggEscapeHtml(gitGraphModel.title || '')}" /></div>
         <div class="property-row"><div class="property-label">Orientation</div>
         <select class="property-select" id="gg-orientation">
             <option value="" ${!gitGraphModel.orientation ? 'selected' : ''}>Default (TB - Top to Bottom)</option>
