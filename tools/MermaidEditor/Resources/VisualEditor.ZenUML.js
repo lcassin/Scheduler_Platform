@@ -1211,33 +1211,39 @@
         function zuFindElementPath(flatIdx) {
             if (!zuDiagram || flatIdx < 0) return [];
 
-            // Walk the flat array, tracking indices at each depth level
-            var depthCounters = [0]; // index counter for each depth level
+            // Walk the flat array building a path of [parentIndex, childIndex, ...] indices
+            // that mirrors the nested model tree the C# FindElementByPath expects.
+            // pathStack[d] = current element index at depth d in the nested model.
+            var pathStack = [0];
             for (let i = 0; i < zuDiagram.elements.length; i++) {
                 const el = zuDiagram.elements[i];
                 if (el.elementType === 'blockEnd' || el.elementType === 'fragmentEnd') {
-                    // Pop back up a level
-                    if (depthCounters.length > 1) depthCounters.pop();
+                    // Leaving a child block — pop child counter and advance parent
+                    if (pathStack.length > 1) {
+                        pathStack.pop();
+                        pathStack[pathStack.length - 1]++;
+                    }
                     continue;
                 }
 
-                // Ensure we have a counter for this depth
-                while (depthCounters.length <= el.depth) depthCounters.push(0);
-                // Trim if we jumped back up
-                while (depthCounters.length > el.depth + 1) depthCounters.pop();
+                // Adjust stack to match element depth
+                while (pathStack.length > el.depth + 1) {
+                    pathStack.pop();
+                    pathStack[pathStack.length - 1]++;
+                }
+                while (pathStack.length <= el.depth) pathStack.push(0);
 
                 if (i === flatIdx) {
-                    // Build path from depth counters
-                    return depthCounters.slice();
+                    return pathStack.slice();
                 }
 
-                // Increment counter at this depth
-                depthCounters[el.depth]++;
-
-                // If this element has a block (children), prepare the next depth level
-                if (el.hasBlock && el.elementType === 'message') {
-                    while (depthCounters.length <= el.depth + 1) depthCounters.push(0);
-                    depthCounters[el.depth + 1] = 0;
+                // If this element opens a child block, descend into it
+                // (don't increment the current depth counter — this element IS the parent)
+                if (el.hasBlock && (el.elementType === 'message' || el.elementType === 'fragment')) {
+                    pathStack.push(0); // start child counter at 0
+                } else {
+                    // Sibling at this depth — increment counter
+                    pathStack[el.depth]++;
                 }
             }
             return [];

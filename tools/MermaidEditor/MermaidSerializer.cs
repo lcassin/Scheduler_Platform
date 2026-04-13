@@ -2227,7 +2227,13 @@ public static class MermaidSerializer
 
                 case ZenUMLReturn ret:
                     if (!string.IsNullOrEmpty(ret.Value))
-                        sb.AppendLine($"{indent}return {ret.Value}");
+                    {
+                        // Quote return values containing spaces so ZenUML treats them as a single token
+                        var retVal = ret.Value.Contains(' ') && !ret.Value.StartsWith('"')
+                            ? $"\"{ret.Value}\""
+                            : ret.Value;
+                        sb.AppendLine($"{indent}return {retVal}");
+                    }
                     else
                         sb.AppendLine($"{indent}return");
                     break;
