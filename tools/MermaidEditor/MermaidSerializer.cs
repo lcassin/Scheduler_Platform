@@ -2401,4 +2401,114 @@ public static class MermaidSerializer
             }
         }
     }
+
+    // =============================================
+    // XY Chart Serializer
+    // =============================================
+
+    /// <summary>
+    /// Serializes an XYChartModel to valid Mermaid XY chart text.
+    /// </summary>
+    public static string SerializeXYChart(XYChartModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments before declaration
+        WriteXYChartCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write xychart-beta declaration
+        if (model.Horizontal)
+            sb.AppendLine("xychart-beta horizontal");
+        else
+            sb.AppendLine("xychart-beta");
+
+        // Write title
+        if (!string.IsNullOrEmpty(model.Title))
+        {
+            sb.AppendLine($"{Indent}title \"{model.Title}\"");
+        }
+
+        // Write x-axis
+        if (model.XAxisCategories != null && model.XAxisCategories.Count > 0)
+        {
+            var cats = string.Join(", ", model.XAxisCategories);
+            if (!string.IsNullOrEmpty(model.XAxisTitle))
+                sb.AppendLine($"{Indent}x-axis \"{model.XAxisTitle}\" [{cats}]");
+            else
+                sb.AppendLine($"{Indent}x-axis [{cats}]");
+        }
+        else if (model.XAxisMin.HasValue && model.XAxisMax.HasValue)
+        {
+            var min = model.XAxisMin.Value.ToString("G", CultureInfo.InvariantCulture);
+            var max = model.XAxisMax.Value.ToString("G", CultureInfo.InvariantCulture);
+            if (!string.IsNullOrEmpty(model.XAxisTitle))
+                sb.AppendLine($"{Indent}x-axis \"{model.XAxisTitle}\" {min} --> {max}");
+            else
+                sb.AppendLine($"{Indent}x-axis {min} --> {max}");
+        }
+
+        // Write y-axis
+        if (model.YAxisMin.HasValue && model.YAxisMax.HasValue)
+        {
+            var min = model.YAxisMin.Value.ToString("G", CultureInfo.InvariantCulture);
+            var max = model.YAxisMax.Value.ToString("G", CultureInfo.InvariantCulture);
+            if (!string.IsNullOrEmpty(model.YAxisTitle))
+                sb.AppendLine($"{Indent}y-axis \"{model.YAxisTitle}\" {min} --> {max}");
+            else
+                sb.AppendLine($"{Indent}y-axis {min} --> {max}");
+        }
+        else if (!string.IsNullOrEmpty(model.YAxisTitle))
+        {
+            sb.AppendLine($"{Indent}y-axis \"{model.YAxisTitle}\"");
+        }
+
+        // Write data series
+        foreach (var series in model.DataSeries)
+        {
+            var values = string.Join(", ", series.Data.Select(v => v.ToString("G", CultureInfo.InvariantCulture)));
+            sb.AppendLine($"{Indent}{series.Type} [{values}]");
+        }
+
+        // Write trailing comments
+        WriteXYChartTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    private static void WriteXYChartCommentsBeforeLine(StringBuilder sb, XYChartModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    private static void WriteXYChartTrailingComments(StringBuilder sb, XYChartModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
 }

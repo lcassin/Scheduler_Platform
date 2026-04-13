@@ -4081,4 +4081,180 @@ public static class MermaidParser
             or "opt" or "par" or "try" or "catch" or "finally" or "return" or "new"
             or "title" or "zenuml";
     }
+
+    // =============================================
+    // XY Chart Parser
+    // =============================================
+
+    private static readonly Regex XYChartDeclaration = new(@"^\s*xychart-beta(?:\s+(horizontal))?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex XYChartTitlePattern = new(@"^\s*title\s+""([^""]+)""\s*$", RegexOptions.Compiled);
+    private static readonly Regex XYChartTitleUnquotedPattern = new(@"^\s*title\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex XYChartXAxisCategoriesPattern = new(@"^\s*x-axis\s+(?:""([^""]+)""\s+)?\[([^\]]*)\]\s*$", RegexOptions.Compiled);
+    private static readonly Regex XYChartXAxisRangePattern = new(@"^\s*x-axis\s+(?:""([^""]+)""\s+)?([\d.]+)\s*-->\s*([\d.]+)\s*$", RegexOptions.Compiled);
+    private static readonly Regex XYChartYAxisPattern = new(@"^\s*y-axis\s+(?:""([^""]+)""\s+)?([\d.]+)\s*-->\s*([\d.]+)\s*$", RegexOptions.Compiled);
+    private static readonly Regex XYChartYAxisLabelOnlyPattern = new(@"^\s*y-axis\s+""([^""]+)""\s*$", RegexOptions.Compiled);
+    private static readonly Regex XYChartBarPattern = new(@"^\s*bar\s+\[([^\]]*)\]\s*$", RegexOptions.Compiled);
+    private static readonly Regex XYChartLinePattern = new(@"^\s*line\s+\[([^\]]*)\]\s*$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses Mermaid XY chart text into an XYChartModel.
+    /// XY Chart syntax:
+    ///   xychart-beta
+    ///       title "Chart Title"
+    ///       x-axis [Jan, Feb, Mar]
+    ///       y-axis "Revenue" 0 --> 10000
+    ///       bar [5000, 6000, 7500]
+    ///       line [5000, 6000, 7500]
+    /// </summary>
+    public static XYChartModel? ParseXYChart(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new XYChartModel();
+        bool foundDeclaration = false;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                model.Comments.Add(new CommentEntry
+                {
+                    Text = commentMatch.Groups[1].Value,
+                    OriginalLineIndex = i
+                });
+                continue;
+            }
+
+            // Look for xychart-beta declaration
+            if (!foundDeclaration)
+            {
+                var declMatch = XYChartDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    foundDeclaration = true;
+                    model.DeclarationLineIndex = i;
+                    if (declMatch.Groups[1].Success && !string.IsNullOrEmpty(declMatch.Groups[1].Value))
+                        model.Horizontal = true;
+                    continue;
+                }
+
+                model.PreambleLines.Add(line);
+                continue;
+            }
+
+            var trimmed = line.Trim();
+
+            // Title (quoted)
+            var titleMatch = XYChartTitlePattern.Match(trimmed);
+            if (titleMatch.Success)
+            {
+                model.Title = titleMatch.Groups[1].Value;
+                continue;
+            }
+
+            // Title (unquoted fallback)
+            var titleUnquotedMatch = XYChartTitleUnquotedPattern.Match(trimmed);
+            if (titleUnquotedMatch.Success)
+            {
+                model.Title = titleUnquotedMatch.Groups[1].Value.Trim().Trim('"');
+                continue;
+            }
+
+            // x-axis with categories: x-axis ["label"] [cat1, cat2, ...]
+            var xCatMatch = XYChartXAxisCategoriesPattern.Match(trimmed);
+            if (xCatMatch.Success)
+            {
+                if (xCatMatch.Groups[1].Success && !string.IsNullOrEmpty(xCatMatch.Groups[1].Value))
+                    model.XAxisTitle = xCatMatch.Groups[1].Value;
+                var cats = xCatMatch.Groups[2].Value
+                    .Split(',')
+                    .Select(c => c.Trim().Trim('"'))
+                    .Where(c => !string.IsNullOrEmpty(c))
+                    .ToList();
+                model.XAxisCategories = cats;
+                continue;
+            }
+
+            // x-axis with range: x-axis ["label"] min --> max
+            var xRangeMatch = XYChartXAxisRangePattern.Match(trimmed);
+            if (xRangeMatch.Success)
+            {
+                if (xRangeMatch.Groups[1].Success && !string.IsNullOrEmpty(xRangeMatch.Groups[1].Value))
+                    model.XAxisTitle = xRangeMatch.Groups[1].Value;
+                if (double.TryParse(xRangeMatch.Groups[2].Value, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var xMin))
+                    model.XAxisMin = xMin;
+                if (double.TryParse(xRangeMatch.Groups[3].Value, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var xMax))
+                    model.XAxisMax = xMax;
+                continue;
+            }
+
+            // y-axis with range: y-axis ["label"] min --> max
+            var yMatch = XYChartYAxisPattern.Match(trimmed);
+            if (yMatch.Success)
+            {
+                if (yMatch.Groups[1].Success && !string.IsNullOrEmpty(yMatch.Groups[1].Value))
+                    model.YAxisTitle = yMatch.Groups[1].Value;
+                if (double.TryParse(yMatch.Groups[2].Value, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var yMin))
+                    model.YAxisMin = yMin;
+                if (double.TryParse(yMatch.Groups[3].Value, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var yMax))
+                    model.YAxisMax = yMax;
+                continue;
+            }
+
+            // y-axis label only: y-axis "label"
+            var yLabelMatch = XYChartYAxisLabelOnlyPattern.Match(trimmed);
+            if (yLabelMatch.Success)
+            {
+                model.YAxisTitle = yLabelMatch.Groups[1].Value;
+                continue;
+            }
+
+            // bar [val1, val2, ...]
+            var barMatch = XYChartBarPattern.Match(trimmed);
+            if (barMatch.Success)
+            {
+                var values = ParseNumericList(barMatch.Groups[1].Value);
+                model.DataSeries.Add(new XYChartDataSeries { Type = "bar", Data = values });
+                continue;
+            }
+
+            // line [val1, val2, ...]
+            var lineMatch = XYChartLinePattern.Match(trimmed);
+            if (lineMatch.Success)
+            {
+                var values = ParseNumericList(lineMatch.Groups[1].Value);
+                model.DataSeries.Add(new XYChartDataSeries { Type = "line", Data = values });
+                continue;
+            }
+        }
+
+        return foundDeclaration ? model : null;
+    }
+
+    /// <summary>
+    /// Parses a comma-separated string of numbers into a list of doubles.
+    /// </summary>
+    private static List<double> ParseNumericList(string csv)
+    {
+        return csv.Split(',')
+            .Select(v => v.Trim())
+            .Where(v => !string.IsNullOrEmpty(v))
+            .Select(v => double.TryParse(v, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : 0.0)
+            .ToList();
+    }
 }

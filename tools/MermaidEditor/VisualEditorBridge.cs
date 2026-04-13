@@ -22,6 +22,7 @@ public enum ActiveDiagramType
     Journey,
     QuadrantChart,
     GitGraph,
+    XYChart,
     ZenUML
 }
 
@@ -268,6 +269,12 @@ public partial class VisualEditorBridge
                 await RestoreZenUMLToEditorAsync();
                 RaiseZenUMLModelChanged("undo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.XYChart)
+            {
+                RestoreXYChartModelFromJson(previousJson);
+                await RestoreXYChartToEditorAsync();
+                RaiseXYChartModelChanged("undo");
+            }
             else
             {
                 RestoreModelFromJson(previousJson);
@@ -373,6 +380,12 @@ public partial class VisualEditorBridge
                 await RestoreZenUMLToEditorAsync();
                 RaiseZenUMLModelChanged("redo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.XYChart)
+            {
+                RestoreXYChartModelFromJson(redoJson);
+                await RestoreXYChartToEditorAsync();
+                RaiseXYChartModelChanged("redo");
+            }
             else
             {
                 RestoreModelFromJson(redoJson);
@@ -415,6 +428,8 @@ public partial class VisualEditorBridge
             return ConvertGitGraphModelToJson(_gitGraphModel);
         if (_activeDiagramType == ActiveDiagramType.ZenUML && _zenUMLModel != null)
             return ConvertZenUMLModelToJson(_zenUMLModel);
+        if (_activeDiagramType == ActiveDiagramType.XYChart && _xyChartModel != null)
+            return ConvertXYChartModelToJson(_xyChartModel);
         return ConvertModelToJson(_model);
     }
 
@@ -1080,6 +1095,31 @@ public partial class VisualEditorBridge
                 case "zu_participantSelected":
                 case "zu_messageSelected":
                 case "zu_fragmentSelected":
+                    break;
+
+                // ===== XY Chart Messages =====
+
+                case "xy_seriesCreated":
+                    HandleXYChartSeriesCreated(root);
+                    break;
+
+                case "xy_seriesEdited":
+                    HandleXYChartSeriesEdited(root);
+                    break;
+
+                case "xy_seriesDeleted":
+                    HandleXYChartSeriesDeleted(root);
+                    break;
+
+                case "xy_seriesMoved":
+                    HandleXYChartSeriesMoved(root);
+                    break;
+
+                case "xy_settingsChanged":
+                    HandleXYChartSettingsChanged(root);
+                    break;
+
+                case "xy_seriesSelected":
                     break;
             }
         }
