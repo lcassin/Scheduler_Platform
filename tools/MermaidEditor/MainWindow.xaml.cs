@@ -131,6 +131,7 @@ public partial class MainWindow : Window
     private JourneyModel? _currentJourneyModel;
     private QuadrantChartModel? _currentQuadrantChartModel;
     private GitGraphModel? _currentGitGraphModel;
+    private XYChartModel? _currentXYChartModel;
     private bool _isVisualEditorUpdating; // Prevent re-entrant updates between text <-> visual
     private bool _visualEditorHasFocus; // Tracks whether the Visual Editor pane has focus (for toolbar enable/disable)
 
@@ -4971,6 +4972,7 @@ Console.WriteLine(""Hello, World!"");
                     "MermaidEditor.Resources.VisualEditor.Journey.js",
                     "MermaidEditor.Resources.VisualEditor.Quadrant.js",
                     "MermaidEditor.Resources.VisualEditor.GitGraph.js",
+                    "MermaidEditor.Resources.VisualEditor.XYChart.js",
                 };
                 var injectedJs = new System.Text.StringBuilder();
                 foreach (var jsFile in jsFiles)
@@ -5006,6 +5008,7 @@ Console.WriteLine(""Hello, World!"");
             _visualEditorBridge.JourneyModelChanged += VisualEditorBridge_JourneyModelChanged;
             _visualEditorBridge.QuadrantChartModelChanged += VisualEditorBridge_QuadrantChartModelChanged;
             _visualEditorBridge.GitGraphModelChanged += VisualEditorBridge_GitGraphModelChanged;
+            _visualEditorBridge.XYChartModelChanged += VisualEditorBridge_XYChartModelChanged;
             _visualEditorBridge.EditorReady += VisualEditorBridge_EditorReady;
 
             // Wire up focus tracking for code-only toolbar enable/disable
@@ -5163,6 +5166,10 @@ Console.WriteLine(""Hello, World!"");
             else if (_currentGitGraphModel != null)
             {
                 await _visualEditorBridge.UpdateGitGraphModelAsync(_currentGitGraphModel);
+            }
+            else if (_currentXYChartModel != null)
+            {
+                await _visualEditorBridge.UpdateXYChartModelAsync(_currentXYChartModel);
             }
             else if (_currentFlowchartModel != null)
             {
@@ -5618,6 +5625,40 @@ Console.WriteLine(""Hello, World!"");
     }
 
     /// <summary>
+    /// Called when the visual editor modifies the XYChartModel.
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private async void VisualEditorBridge_XYChartModelChanged(object? sender, XYChartModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            var text = MermaidSerializer.SerializeXYChart(e.Model);
+
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true;
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+                RenderPreview();
+                await _visualEditorBridge.RefreshXYChartAsync();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
     /// Updates the visibility of the visual editor mode toolbar based on the current render mode.
     /// Only visible for Mermaid files.
     /// </summary>
@@ -5782,6 +5823,10 @@ Console.WriteLine(""Hello, World!"");
                 else if (_currentGitGraphModel != null)
                 {
                     text = MermaidSerializer.SerializeGitGraph(_currentGitGraphModel);
+                }
+                else if (_currentXYChartModel != null)
+                {
+                    text = MermaidSerializer.SerializeXYChart(_currentXYChartModel);
                 }
                 else if (_currentFlowchartModel != null)
                 {
@@ -5962,6 +6007,16 @@ Console.WriteLine(""Hello, World!"");
                     await _visualEditorBridge.UpdateGitGraphModelAsync(_currentGitGraphModel);
                 }
             }
+            else if (IsXYChartDiagram(text))
+            {
+                var parsed = MermaidParser.ParseXYChart(text);
+                if (parsed != null)
+                {
+                    ClearAllModels();
+                    _currentXYChartModel = parsed;
+                    await _visualEditorBridge.UpdateXYChartModelAsync(_currentXYChartModel);
+                }
+            }
             else
             {
                 var parsed = MermaidParser.ParseFlowchart(text);
@@ -5996,7 +6051,7 @@ Console.WriteLine(""Hello, World!"");
         // Flowcharts, sequence, class, state, ER, gantt, mindmap, and pie diagrams have visual editing support
         return IsFlowchart(text) || IsSequenceDiagram(text) || IsClassDiagram(text) || IsStateDiagram(text) || IsERDiagram(text)
             || IsGanttDiagram(text) || IsMindMapDiagram(text) || IsPieChartDiagram(text) || IsTimelineDiagram(text) || IsJourneyDiagram(text)
-            || IsQuadrantChartDiagram(text) || IsGitGraphDiagram(text);
+            || IsQuadrantChartDiagram(text) || IsGitGraphDiagram(text) || IsXYChartDiagram(text);
     }
 
     /// <summary>
@@ -6163,6 +6218,16 @@ Console.WriteLine(""Hello, World!"");
     }
 
     /// <summary>
+    /// Detects whether the given Mermaid text is an XY chart.
+    /// </summary>
+    private static bool IsXYChartDiagram(string text)
+    {
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && (line.Equals("xychart-beta", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("xychart-beta ", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// Clears all diagram model references. Called before setting a new active model.
     /// </summary>
     private void ClearAllModels()
@@ -6179,6 +6244,7 @@ Console.WriteLine(""Hello, World!"");
         _currentJourneyModel = null;
         _currentQuadrantChartModel = null;
         _currentGitGraphModel = null;
+        _currentXYChartModel = null;
     }
 
     /// <summary>

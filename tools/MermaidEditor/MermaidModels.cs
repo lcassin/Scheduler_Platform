@@ -1983,3 +1983,101 @@ public class GitGraphCommand
     /// </summary>
     public string? Parent { get; set; }
 }
+
+// =============================================
+// XY Chart Models
+// =============================================
+
+/// <summary>
+/// Represents a Mermaid XY chart diagram.
+/// Syntax:
+///   xychart-beta
+///       title "Sales Revenue"
+///       x-axis [Jan, Feb, Mar, Apr]
+///       y-axis "Revenue" 0 --> 10000
+///       bar [5000, 6000, 7500, 8200]
+///       line [5000, 6000, 7500, 8200]
+/// </summary>
+public class XYChartModel
+{
+    /// <summary>
+    /// The chart title (optional).
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Whether the chart is horizontal (default is vertical).
+    /// </summary>
+    public bool Horizontal { get; set; }
+
+    /// <summary>
+    /// X-axis title/label (optional).
+    /// </summary>
+    public string? XAxisTitle { get; set; }
+
+    /// <summary>
+    /// X-axis categories (e.g., ["Jan", "Feb", "Mar"]). Mutually exclusive with XAxisMin/XAxisMax.
+    /// </summary>
+    public List<string>? XAxisCategories { get; set; }
+
+    /// <summary>
+    /// X-axis numeric range minimum (for numeric x-axis). Optional.
+    /// </summary>
+    public double? XAxisMin { get; set; }
+
+    /// <summary>
+    /// X-axis numeric range maximum (for numeric x-axis). Optional.
+    /// </summary>
+    public double? XAxisMax { get; set; }
+
+    /// <summary>
+    /// Y-axis title/label (optional).
+    /// </summary>
+    public string? YAxisTitle { get; set; }
+
+    /// <summary>
+    /// Y-axis numeric range minimum. Optional.
+    /// </summary>
+    public double? YAxisMin { get; set; }
+
+    /// <summary>
+    /// Y-axis numeric range maximum. Optional.
+    /// </summary>
+    public double? YAxisMax { get; set; }
+
+    /// <summary>
+    /// Data series (bar and line).
+    /// </summary>
+    public List<XYChartDataSeries> DataSeries { get; set; } = new();
+
+    /// <summary>
+    /// Comments preserved from the original text.
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines before the xychart declaration.
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The line index of the xychart declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+}
+
+/// <summary>
+/// Represents a data series (bar or line) in an XY chart.
+/// </summary>
+public class XYChartDataSeries
+{
+    /// <summary>
+    /// The series type: "bar" or "line".
+    /// </summary>
+    public string Type { get; set; } = "bar";
+
+    /// <summary>
+    /// The data values for this series.
+    /// </summary>
+    public List<double> Data { get; set; } = new();
+}
