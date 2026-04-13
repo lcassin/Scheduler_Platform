@@ -4228,7 +4228,10 @@ public static class MermaidParser
             if (barMatch.Success)
             {
                 var values = ParseNumericList(barMatch.Groups[1].Value);
-                model.DataSeries.Add(new XYChartDataSeries { Type = "bar", Data = values });
+                var barSeries = new XYChartDataSeries { Type = "bar", Data = values };
+                // Initialize NoValue list (all false for bar series)
+                barSeries.NoValue = new List<bool>(new bool[values.Count]);
+                model.DataSeries.Add(barSeries);
                 continue;
             }
 
@@ -4237,8 +4240,51 @@ public static class MermaidParser
             if (lineMatch.Success)
             {
                 var values = ParseNumericList(lineMatch.Groups[1].Value);
-                model.DataSeries.Add(new XYChartDataSeries { Type = "line", Data = values });
+                var lineSeries = new XYChartDataSeries { Type = "line", Data = values };
+                // Initialize NoValue list (all false — parsed values are all defined)
+                lineSeries.NoValue = new List<bool>(new bool[values.Count]);
+                model.DataSeries.Add(lineSeries);
                 continue;
+            }
+        }
+
+        // Post-process: read @label and @novalue comment annotations
+        if (foundDeclaration)
+        {
+            foreach (var line in lines)
+            {
+                var t = line.Trim();
+                // @label:index=Label Text
+                if (t.StartsWith("%% @label:") || t.StartsWith("%%@label:"))
+                {
+                    var payload = t.StartsWith("%% @label:") ? t.Substring(10) : t.Substring(9);
+                    var eqIdx = payload.IndexOf('=');
+                    if (eqIdx > 0 && int.TryParse(payload.Substring(0, eqIdx), out var labelIdx)
+                        && labelIdx >= 0 && labelIdx < model.DataSeries.Count)
+                    {
+                        model.DataSeries[labelIdx].Label = payload.Substring(eqIdx + 1);
+                    }
+                }
+                // @novalue:index=0,1,0,1,...
+                else if (t.StartsWith("%% @novalue:") || t.StartsWith("%%@novalue:"))
+                {
+                    var payload = t.StartsWith("%% @novalue:") ? t.Substring(12) : t.Substring(11);
+                    var eqIdx = payload.IndexOf('=');
+                    if (eqIdx > 0 && int.TryParse(payload.Substring(0, eqIdx), out var nvIdx)
+                        && nvIdx >= 0 && nvIdx < model.DataSeries.Count)
+                    {
+                        var flags = payload.Substring(eqIdx + 1).Split(',');
+                        var series = model.DataSeries[nvIdx];
+                        series.NoValue.Clear();
+                        foreach (var f in flags)
+                            series.NoValue.Add(f.Trim() == "1");
+                        // Ensure list matches data length
+                        while (series.NoValue.Count < series.Data.Count)
+                            series.NoValue.Add(false);
+                        while (series.NoValue.Count > series.Data.Count && series.NoValue.Count > 0)
+                            series.NoValue.RemoveAt(series.NoValue.Count - 1);
+                    }
+                }
             }
         }
 

@@ -2475,7 +2475,7 @@ public static class MermaidSerializer
             sb.AppendLine($"{Indent}y-axis \"{model.YAxisTitle}\"");
         }
 
-        // Write data series — pad shorter series with 0s to match longest series length
+        // Write data series — pad shorter series to match longest series length
         // (Mermaid requires all series to have the same number of data points when x-axis categories are defined)
         var maxDataPoints = model.DataSeries.Count > 0 ? model.DataSeries.Max(s => s.Data.Count) : 0;
         if (model.XAxisCategories != null && model.XAxisCategories.Count > maxDataPoints)
@@ -2483,16 +2483,88 @@ public static class MermaidSerializer
         foreach (var series in model.DataSeries)
         {
             var data = series.Data.ToList();
+            var noValue = series.NoValue.ToList();
+
+            // Pad to match maxDataPoints — for line series, new points default to NoValue (interpolated)
             while (data.Count < maxDataPoints)
+            {
                 data.Add(0);
+                noValue.Add(series.Type == "line");
+            }
+            while (noValue.Count < data.Count)
+                noValue.Add(false);
+
+            // For line series, interpolate NoValue points (first/last are never NoValue)
+            if (series.Type == "line" && data.Count >= 2)
+            {
+                // Ensure first and last are never NoValue
+                noValue[0] = false;
+                noValue[data.Count - 1] = false;
+
+                InterpolateNoValuePoints(data, noValue);
+            }
+
             var values = string.Join(", ", data.Select(v => v.ToString("G", CultureInfo.InvariantCulture)));
             sb.AppendLine($"{Indent}{series.Type} [{values}]");
+        }
+
+        // Write visual editor metadata as comment annotations (labels, noValue flags)
+        var hasMetadata = false;
+        for (int si = 0; si < model.DataSeries.Count; si++)
+        {
+            var series = model.DataSeries[si];
+            if (!string.IsNullOrWhiteSpace(series.Label))
+            {
+                if (!hasMetadata) { sb.AppendLine(); hasMetadata = true; }
+                sb.AppendLine($"{Indent}%% @label:{si}={series.Label}");
+            }
+            if (series.Type == "line" && series.NoValue.Any(v => v))
+            {
+                if (!hasMetadata) { sb.AppendLine(); hasMetadata = true; }
+                var flags = string.Join(",", series.NoValue.Select(v => v ? "1" : "0"));
+                sb.AppendLine($"{Indent}%% @novalue:{si}={flags}");
+            }
         }
 
         // Write trailing comments
         WriteXYChartTrailingComments(sb, model);
 
         return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Linearly interpolates data values for points marked as NoValue.
+    /// For each NoValue point (or consecutive group), calculates values that form a straight line
+    /// between the nearest defined neighbors.
+    /// </summary>
+    private static void InterpolateNoValuePoints(List<double> data, List<bool> noValue)
+    {
+        int i = 0;
+        while (i < data.Count)
+        {
+            if (!noValue[i]) { i++; continue; }
+
+            // Find the start of this NoValue group
+            int groupStart = i;
+            // The defined point before this group
+            int prevDefined = groupStart - 1; // guaranteed >= 0 since first element is never NoValue
+
+            // Find the end of this NoValue group
+            while (i < data.Count && noValue[i]) i++;
+            // The defined point after this group
+            int nextDefined = i; // guaranteed < data.Count since last element is never NoValue
+
+            // Linear interpolation between prevDefined and nextDefined
+            double startVal = data[prevDefined];
+            double endVal = data[nextDefined];
+            int span = nextDefined - prevDefined;
+
+            for (int j = groupStart; j < nextDefined; j++)
+            {
+                double t = (double)(j - prevDefined) / span;
+                data[j] = startVal + (endVal - startVal) * t;
+            }
+        }
     }
 
     private static void WriteXYChartCommentsBeforeLine(StringBuilder sb, XYChartModel model, int lineIndex)

@@ -1134,6 +1134,10 @@ public partial class VisualEditorBridge
                 case "xy_dataPointCreated":
                     HandleXYChartDataPointCreated(root);
                     break;
+
+                case "xy_dataPointNoValueToggled":
+                    HandleXYChartDataPointNoValueToggled(root);
+                    break;
             }
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)

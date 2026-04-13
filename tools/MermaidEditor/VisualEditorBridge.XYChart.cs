@@ -86,7 +86,9 @@ public partial class VisualEditorBridge
             DataSeries = model.DataSeries.Select(s => new XYChartDataSeriesDto
             {
                 Type = s.Type,
-                Data = s.Data
+                Label = s.Label,
+                Data = s.Data,
+                NoValue = s.NoValue.Any(v => v) ? s.NoValue : null
             }).ToList(),
             PreambleLines = model.PreambleLines,
             DeclarationLineIndex = model.DeclarationLineIndex
@@ -106,6 +108,9 @@ public partial class VisualEditorBridge
         PushUndo();
         var series = new XYChartDataSeries { Type = type };
 
+        if (root.TryGetProperty("label", out var lProp))
+            series.Label = lProp.GetString();
+
         if (root.TryGetProperty("data", out var dProp) && dProp.ValueKind == JsonValueKind.Array)
         {
             foreach (var val in dProp.EnumerateArray())
@@ -113,6 +118,16 @@ public partial class VisualEditorBridge
                 series.Data.Add(val.GetDouble());
             }
         }
+
+        // Initialize NoValue list (all false by default)
+        if (root.TryGetProperty("noValue", out var nvProp) && nvProp.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var val in nvProp.EnumerateArray())
+                series.NoValue.Add(val.GetBoolean());
+        }
+        // Ensure NoValue list matches Data length
+        while (series.NoValue.Count < series.Data.Count)
+            series.NoValue.Add(false);
 
         // Insert at specific index or append
         if (root.TryGetProperty("index", out var iProp))
@@ -143,6 +158,9 @@ public partial class VisualEditorBridge
         if (root.TryGetProperty("seriesType", out var tProp))
             series.Type = tProp.GetString() ?? series.Type;
 
+        if (root.TryGetProperty("label", out var lProp))
+            series.Label = lProp.GetString();
+
         if (root.TryGetProperty("data", out var dProp) && dProp.ValueKind == JsonValueKind.Array)
         {
             series.Data.Clear();
@@ -151,6 +169,18 @@ public partial class VisualEditorBridge
                 series.Data.Add(val.GetDouble());
             }
         }
+
+        if (root.TryGetProperty("noValue", out var nvProp) && nvProp.ValueKind == JsonValueKind.Array)
+        {
+            series.NoValue.Clear();
+            foreach (var val in nvProp.EnumerateArray())
+                series.NoValue.Add(val.GetBoolean());
+        }
+        // Ensure NoValue list matches Data length
+        while (series.NoValue.Count < series.Data.Count)
+            series.NoValue.Add(false);
+        while (series.NoValue.Count > series.Data.Count)
+            series.NoValue.RemoveAt(series.NoValue.Count - 1);
 
         RaiseXYChartModelChanged("xy_seriesEdited");
     }
@@ -195,6 +225,9 @@ public partial class VisualEditorBridge
 
         PushUndo();
         series.Data[dataIndex] = value;
+        // When a value is explicitly set, clear the NoValue flag
+        if (dataIndex < series.NoValue.Count)
+            series.NoValue[dataIndex] = false;
         RaiseXYChartModelChanged("xy_dataPointEdited");
     }
 
@@ -209,6 +242,8 @@ public partial class VisualEditorBridge
 
         PushUndo();
         series.Data.RemoveAt(dataIndex);
+        if (dataIndex < series.NoValue.Count)
+            series.NoValue.RemoveAt(dataIndex);
         RaiseXYChartModelChanged("xy_dataPointDeleted");
     }
 
@@ -220,20 +255,53 @@ public partial class VisualEditorBridge
         if (seriesIndex < 0 || seriesIndex >= _xyChartModel.DataSeries.Count) return;
         var series = _xyChartModel.DataSeries[seriesIndex];
 
+        var isNoValue = root.TryGetProperty("noValue", out var nvProp) && nvProp.GetBoolean();
+
         PushUndo();
         if (root.TryGetProperty("dataIndex", out var diProp))
         {
             var dataIndex = diProp.GetInt32();
             if (dataIndex >= 0 && dataIndex <= series.Data.Count)
+            {
                 series.Data.Insert(dataIndex, value);
+                // Ensure NoValue list is long enough then insert
+                while (series.NoValue.Count < dataIndex)
+                    series.NoValue.Add(false);
+                series.NoValue.Insert(dataIndex, isNoValue);
+            }
             else
+            {
                 series.Data.Add(value);
+                series.NoValue.Add(isNoValue);
+            }
         }
         else
         {
             series.Data.Add(value);
+            series.NoValue.Add(isNoValue);
         }
         RaiseXYChartModelChanged("xy_dataPointCreated");
+    }
+
+    private void HandleXYChartDataPointNoValueToggled(JsonElement root)
+    {
+        if (_xyChartModel == null) return;
+        var seriesIndex = root.GetProperty("seriesIndex").GetInt32();
+        var dataIndex = root.GetProperty("dataIndex").GetInt32();
+        var noValue = root.GetProperty("noValue").GetBoolean();
+        if (seriesIndex < 0 || seriesIndex >= _xyChartModel.DataSeries.Count) return;
+        var series = _xyChartModel.DataSeries[seriesIndex];
+        if (dataIndex < 0 || dataIndex >= series.Data.Count) return;
+
+        // Don't allow NoValue on first or last element
+        if (dataIndex == 0 || dataIndex == series.Data.Count - 1) return;
+
+        PushUndo();
+        // Ensure NoValue list matches Data length
+        while (series.NoValue.Count < series.Data.Count)
+            series.NoValue.Add(false);
+        series.NoValue[dataIndex] = noValue;
+        RaiseXYChartModelChanged("xy_dataPointNoValueToggled");
     }
 
     private void HandleXYChartSettingsChanged(JsonElement root)
@@ -311,7 +379,9 @@ public partial class VisualEditorBridge
                 _xyChartModel.DataSeries.Add(new XYChartDataSeries
                 {
                     Type = s.Type ?? "bar",
-                    Data = s.Data ?? new List<double>()
+                    Label = s.Label,
+                    Data = s.Data ?? new List<double>(),
+                    NoValue = s.NoValue ?? new List<bool>()
                 });
             }
         }
@@ -344,7 +414,9 @@ public partial class VisualEditorBridge
     private class XYChartDataSeriesDto
     {
         public string? Type { get; set; }
+        public string? Label { get; set; }
         public List<double>? Data { get; set; }
+        public List<bool>? NoValue { get; set; }
     }
 }
 

@@ -281,13 +281,19 @@ function renderXYChart() {
             } else {
                 // Line series
                 if (data.length < 1) return;
+                const noValueFlags = s.noValue || [];
                 let pathD = '';
                 const points = [];
                 data.forEach((val, di) => {
                     if (di >= numPoints) return;
                     const x = chartLeft + groupWidth * di + groupWidth / 2;
-                    const y = chartBottom - ((val - dataMin) / dataRange) * chartHeight;
-                    points.push({ x, y });
+                    // For NoValue points, compute interpolated value for display
+                    let displayVal = val;
+                    if (noValueFlags[di] && di > 0 && di < data.length - 1) {
+                        displayVal = _xyInterpolateValue(data, noValueFlags, di);
+                    }
+                    const y = chartBottom - ((displayVal - dataMin) / dataRange) * chartHeight;
+                    points.push({ x, y, isNoValue: !!noValueFlags[di] });
                     pathD += (di === 0 ? 'M' : 'L') + ` ${x} ${y} `;
                 });
 
@@ -311,8 +317,16 @@ function renderXYChart() {
                     dot.setAttribute('cx', pt.x);
                     dot.setAttribute('cy', pt.y);
                     dot.setAttribute('r', isSelected ? '5' : '3');
-                    dot.setAttribute('fill', color);
-                    if (isSelected) {
+                    // NoValue points rendered as hollow (outline only)
+                    if (pt.isNoValue) {
+                        dot.setAttribute('fill', bgColor);
+                        dot.setAttribute('stroke', color);
+                        dot.setAttribute('stroke-width', '2');
+                        dot.setAttribute('stroke-dasharray', '3,2');
+                    } else {
+                        dot.setAttribute('fill', color);
+                    }
+                    if (isSelected && !pt.isNoValue) {
                         dot.setAttribute('stroke', isLight ? '#ff9800' : '#f9e2af');
                         dot.setAttribute('stroke-width', '2');
                     }
@@ -394,9 +408,13 @@ function renderXYChart() {
             label.setAttribute('fill', textColor);
             label.setAttribute('font-size', '12');
             label.setAttribute('font-weight', isSelected ? 'bold' : 'normal');
-            const dataStr = s.data ? s.data.map(v => _xyFormatNumber(v)).join(', ') : '';
-            const truncData = dataStr.length > 50 ? dataStr.substring(0, 50) + '...' : dataStr;
-            label.textContent = `${s.type} [${truncData}]`;
+            if (s.label) {
+                label.textContent = `${s.label} (${s.type})`;
+            } else {
+                const dataStr = s.data ? s.data.map(v => _xyFormatNumber(v)).join(', ') : '';
+                const truncData = dataStr.length > 50 ? dataStr.substring(0, 50) + '...' : dataStr;
+                label.textContent = `${s.type} [${truncData}]`;
+            }
             label.style.cursor = 'pointer';
             label.addEventListener('click', () => selectXYSeries(i));
             label.addEventListener('dblclick', () => editXYChartSeries(i));
@@ -418,6 +436,21 @@ function renderXYChart() {
         svg.style.maxWidth = 'none';
     }
     if (typeof updateMinimap === 'function') updateMinimap();
+}
+
+// Compute interpolated value for a NoValue point based on nearest defined neighbors
+function _xyInterpolateValue(data, noValueFlags, index) {
+    // Find previous defined point
+    let prev = index - 1;
+    while (prev >= 0 && noValueFlags[prev]) prev--;
+    // Find next defined point
+    let next = index + 1;
+    while (next < data.length && noValueFlags[next]) next++;
+    if (prev < 0 || next >= data.length) return data[index];
+    // Linear interpolation
+    var span = next - prev;
+    var t = (index - prev) / span;
+    return data[prev] + (data[next] - data[prev]) * t;
 }
 
 function _xyFormatNumber(val) {
@@ -495,11 +528,27 @@ function editXYDataPoint(seriesIndex, dataIndex) {
     if (!s.data || dataIndex >= s.data.length) return;
     var currentVal = s.data[dataIndex];
     var catLabel = (xyModel.xAxisCategories && xyModel.xAxisCategories[dataIndex]) ? xyModel.xAxisCategories[dataIndex] : ('Point ' + (dataIndex + 1));
+    var isLine = s.type === 'line';
+    var noValueFlags = s.noValue || [];
+    var isNoValue = !!noValueFlags[dataIndex];
+    var isFirstOrLast = dataIndex === 0 || dataIndex === s.data.length - 1;
 
     var propertyPanel = document.getElementById('property-panel');
     var propPanelTitle = document.getElementById('property-panel-title');
     propPanelTitle.textContent = 'Edit Data Point';
     var body = document.querySelector('.property-panel-body');
+
+    var noValueHtml = '';
+    if (isLine) {
+        noValueHtml = `
+        <div class="property-row">
+            <label style="display:flex;align-items:center;gap:8px;cursor:${isFirstOrLast ? 'not-allowed' : 'pointer'};opacity:${isFirstOrLast ? '0.4' : '1'}">
+                <input type="checkbox" id="xy-dp-novalue" ${isNoValue ? 'checked' : ''} ${isFirstOrLast ? 'disabled' : ''} />
+                <span>No Value (interpolate)</span>
+            </label>
+            ${isFirstOrLast ? '<div style="font-size:11px;opacity:0.5;margin-top:2px">First and last points must have values</div>' : ''}
+        </div>`;
+    }
 
     body.innerHTML = `
         <div class="property-row">
@@ -510,22 +559,54 @@ function editXYDataPoint(seriesIndex, dataIndex) {
             <div class="property-label">Category</div>
             <div class="property-label" style="font-weight:normal;opacity:0.7">${_escHtml(catLabel)}</div>
         </div>
-        <div class="property-row">
+        ${noValueHtml}
+        <div class="property-row" id="xy-dp-value-row" style="${isNoValue ? 'opacity:0.4;pointer-events:none' : ''}">
             <div class="property-label">Value</div>
-            <input class="property-input" id="xy-dp-value" type="number" step="any" value="${currentVal}" />
+            <input class="property-input" id="xy-dp-value" type="number" step="any" value="${currentVal}" ${isNoValue ? 'disabled' : ''} />
         </div>
         <div class="property-row" style="margin-top:8px">
             <button id="xy-dp-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
         </div>
     `;
+
+    // Wire up No Value checkbox toggle
+    var noValueCheckbox = document.getElementById('xy-dp-novalue');
+    if (noValueCheckbox) {
+        noValueCheckbox.addEventListener('change', function() {
+            var valueInput = document.getElementById('xy-dp-value');
+            var valueRow = document.getElementById('xy-dp-value-row');
+            if (this.checked) {
+                valueInput.disabled = true;
+                valueRow.style.opacity = '0.4';
+                valueRow.style.pointerEvents = 'none';
+            } else {
+                valueInput.disabled = false;
+                valueRow.style.opacity = '1';
+                valueRow.style.pointerEvents = '';
+            }
+        });
+    }
+
     document.getElementById('xy-dp-ok').addEventListener('click', function() {
-        var val = parseFloat(document.getElementById('xy-dp-value').value);
-        if (isNaN(val)) return;
-        postMessage({ type: 'xy_dataPointEdited', seriesIndex: seriesIndex, dataIndex: dataIndex, value: val });
+        var noValueChecked = noValueCheckbox ? noValueCheckbox.checked : false;
+        if (noValueChecked) {
+            // Toggle to NoValue
+            postMessage({ type: 'xy_dataPointNoValueToggled', seriesIndex: seriesIndex, dataIndex: dataIndex, noValue: true });
+        } else {
+            var val = parseFloat(document.getElementById('xy-dp-value').value);
+            if (isNaN(val)) return;
+            // If was NoValue, first clear the flag, then set value
+            if (isNoValue) {
+                postMessage({ type: 'xy_dataPointNoValueToggled', seriesIndex: seriesIndex, dataIndex: dataIndex, noValue: false });
+            }
+            postMessage({ type: 'xy_dataPointEdited', seriesIndex: seriesIndex, dataIndex: dataIndex, value: val });
+        }
         propertyPanel.classList.remove('visible');
     });
     propertyPanel.classList.add('visible');
-    setTimeout(function() { document.getElementById('xy-dp-value').select(); }, 50);
+    if (!isNoValue) {
+        setTimeout(function() { document.getElementById('xy-dp-value').select(); }, 50);
+    }
 }
 
 function deleteXYDataPoint(seriesIndex, dataIndex) {
@@ -629,6 +710,10 @@ function createXYChartSeries(insertIndex) {
             </select>
         </div>
         <div class="property-row">
+            <div class="property-label">Label (optional)</div>
+            <input class="property-input" id="xy-dlg-label" placeholder="e.g. Revenue, Expenses..." value="" />
+        </div>
+        <div class="property-row">
             <div class="property-label">Values (comma-separated)</div>
             <input class="property-input" id="xy-dlg-values" value="${defaultValues}" />
         </div>
@@ -639,11 +724,12 @@ function createXYChartSeries(insertIndex) {
     `;
     document.getElementById('xy-dlg-ok').addEventListener('click', function() {
         const type = document.getElementById('xy-dlg-type').value;
+        const label = document.getElementById('xy-dlg-label').value.trim() || null;
         const valStr = document.getElementById('xy-dlg-values').value;
         const data = valStr.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
         if (data.length === 0) return;
 
-        const msg = { type: 'xy_seriesCreated', seriesType: type, data };
+        const msg = { type: 'xy_seriesCreated', seriesType: type, data, label };
         const posEl = document.getElementById('xy-dlg-position');
         if (posEl) {
             const idx = parseInt(posEl.value);
@@ -676,6 +762,10 @@ function editXYChartSeries(index) {
             </select>
         </div>
         <div class="property-row">
+            <div class="property-label">Label (optional)</div>
+            <input class="property-input" id="xy-dlg-label" placeholder="e.g. Revenue, Expenses..." value="${_escHtml(s.label || '')}" />
+        </div>
+        <div class="property-row">
             <div class="property-label">Values (comma-separated)</div>
             <input class="property-input" id="xy-dlg-values" value="${_escHtml(valStr)}" />
         </div>
@@ -685,14 +775,15 @@ function editXYChartSeries(index) {
     `;
     document.getElementById('xy-dlg-ok').addEventListener('click', function() {
         const type = document.getElementById('xy-dlg-type').value;
+        const label = document.getElementById('xy-dlg-label').value.trim() || null;
         const valInput = document.getElementById('xy-dlg-values').value;
         const data = valInput.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
         if (data.length === 0) return;
-        postMessage({ type: 'xy_seriesEdited', index, seriesType: type, data });
+        postMessage({ type: 'xy_seriesEdited', index, seriesType: type, data, label });
         propertyPanel.classList.remove('visible');
     });
     propertyPanel.classList.add('visible');
-    setTimeout(() => document.getElementById('xy-dlg-values').select(), 50);
+    setTimeout(() => document.getElementById('xy-dlg-label').focus(), 50);
 }
 
 function deleteXYChartSeries(index) {
@@ -858,6 +949,14 @@ function showXYChartContextMenu(e, seriesIndex, dataIndex) {
             var catLabel = (xyModel.xAxisCategories && xyModel.xAxisCategories[dataIndex]) ? xyModel.xAxisCategories[dataIndex] : ('Point ' + (dataIndex + 1));
             _xyAddCtxItem(menu, 'Edit Value (' + catLabel + ')', () => editXYDataPoint(seriesIndex, dataIndex));
             _xyAddCtxItem(menu, 'Delete Value', () => deleteXYDataPoint(seriesIndex, dataIndex));
+            // Toggle No Value option for line series (not first/last)
+            if (s.type === 'line' && dataIndex > 0 && s.data && dataIndex < s.data.length - 1) {
+                var nvFlags = s.noValue || [];
+                var isNV = !!nvFlags[dataIndex];
+                _xyAddCtxItem(menu, isNV ? 'Set Explicit Value' : 'Set No Value (Interpolate)', () => {
+                    postMessage({ type: 'xy_dataPointNoValueToggled', seriesIndex: seriesIndex, dataIndex: dataIndex, noValue: !isNV });
+                });
+            }
             _xyAddCtxSeparator(menu);
             _xyAddCtxItem(menu, 'Insert Value Before', () => insertXYDataPoint(seriesIndex, dataIndex));
             _xyAddCtxItem(menu, 'Insert Value After', () => insertXYDataPoint(seriesIndex, dataIndex + 1));

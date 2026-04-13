@@ -2078,9 +2078,22 @@ public class XYChartDataSeries
     public string Type { get; set; } = "bar";
 
     /// <summary>
+    /// Optional label/name for this series (displayed in the visual editor legend).
+    /// Not part of standard Mermaid syntax; stored as a comment annotation.
+    /// </summary>
+    public string? Label { get; set; }
+
+    /// <summary>
     /// The data values for this series.
     /// </summary>
     public List<double> Data { get; set; } = new();
+
+    /// <summary>
+    /// Parallel boolean list indicating which data points are "No Value" (interpolated).
+    /// Only meaningful for line series. When true, the serializer calculates the interpolated
+    /// value from the nearest defined neighbors. First and last elements cannot be NoValue.
+    /// </summary>
+    public List<bool> NoValue { get; set; } = new();
 }
 
 // =============================================
