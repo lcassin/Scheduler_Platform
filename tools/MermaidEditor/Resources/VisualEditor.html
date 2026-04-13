@@ -997,6 +997,39 @@
             <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5" fill="none" stroke-width="1.3"/><path d="M8,2 V4 M8,12 V14 M2,8 H4 M12,8 H14 M3.8,3.8 L5.2,5.2 M10.8,10.8 L12.2,12.2 M3.8,12.2 L5.2,10.8 M10.8,5.2 L12.2,3.8" stroke-width="1.2"/></svg>
             <span class="tooltip">Settings</span>
         </button>
+        <!-- GitGraph-specific buttons -->
+        <button class="toolbar-btn toolbar-gitGraph" id="tb-gg-add-commit" title="Add Commit" style="display:none">
+            <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="4" fill="none" stroke-width="1.3"/><line x1="8" y1="2" x2="8" y2="4" stroke-width="1.2"/><line x1="8" y1="12" x2="8" y2="14" stroke-width="1.2"/><line x1="12" y1="13" x2="14" y2="13" stroke-width="1.3"/><line x1="13" y1="12" x2="13" y2="14" stroke-width="1.3"/></svg>
+            <span class="tooltip">Add Commit</span>
+        </button>
+        <button class="toolbar-btn toolbar-gitGraph" id="tb-gg-add-branch" title="Add Branch" style="display:none">
+            <svg viewBox="0 0 16 16"><circle cx="5" cy="4" r="2" fill="none" stroke-width="1.2"/><circle cx="11" cy="4" r="2" fill="none" stroke-width="1.2"/><circle cx="5" cy="12" r="2" fill="none" stroke-width="1.2"/><line x1="5" y1="6" x2="5" y2="10" stroke-width="1.2"/><path d="M5,8 Q5,4 9,4" fill="none" stroke-width="1.2"/></svg>
+            <span class="tooltip">Add Branch</span>
+        </button>
+        <button class="toolbar-btn toolbar-gitGraph" id="tb-gg-add-checkout" title="Add Checkout" style="display:none">
+            <svg viewBox="0 0 16 16"><path d="M3,8 L6,5 M3,8 L6,11 M4,8 H13" fill="none" stroke-width="1.5"/></svg>
+            <span class="tooltip">Add Checkout</span>
+        </button>
+        <button class="toolbar-btn toolbar-gitGraph" id="tb-gg-add-merge" title="Add Merge" style="display:none">
+            <svg viewBox="0 0 16 16"><circle cx="4" cy="4" r="2" fill="none" stroke-width="1.2"/><circle cx="12" cy="4" r="2" fill="none" stroke-width="1.2"/><circle cx="8" cy="12" r="2" fill="none" stroke-width="1.2"/><line x1="4" y1="6" x2="8" y2="10" stroke-width="1.2"/><line x1="12" y1="6" x2="8" y2="10" stroke-width="1.2"/></svg>
+            <span class="tooltip">Add Merge</span>
+        </button>
+        <button class="toolbar-btn toolbar-gitGraph" id="tb-gg-add-cherrypick" title="Add Cherry-pick" style="display:none">
+            <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="4" fill="none" stroke-width="1.2" stroke-dasharray="3,2"/><circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none"/></svg>
+            <span class="tooltip">Add Cherry-pick</span>
+        </button>
+        <button class="toolbar-btn toolbar-gitGraph" id="tb-gg-edit" title="Edit Selected" style="display:none">
+            <svg viewBox="0 0 16 16"><path d="M2,12 L11,3 L13,5 L4,14 L1,15 Z" fill="none" stroke-width="1.2"/><line x1="9.5" y1="4.5" x2="11.5" y2="6.5" stroke-width="1"/></svg>
+            <span class="tooltip">Edit Selected</span>
+        </button>
+        <button class="toolbar-btn toolbar-gitGraph" id="tb-gg-delete" title="Delete Selected" style="display:none">
+            <svg viewBox="0 0 16 16"><path d="M5,3 V2 h6 v1 h3 v1.5 H2 V3 h3z M3,5.5 h10 l-0.8,9 H3.8 L3,5.5z M6.5,7 v5.5 M9.5,7 v5.5" fill="none" stroke-width="1.2"/></svg>
+            <span class="tooltip">Delete Selected</span>
+        </button>
+        <button class="toolbar-btn toolbar-gitGraph" id="tb-gg-settings" title="GitGraph Settings" style="display:none">
+            <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5" fill="none" stroke-width="1.3"/><path d="M8,2 V4 M8,12 V14 M2,8 H4 M12,8 H14 M3.8,3.8 L5.2,5.2 M10.8,10.8 L12.2,12.2 M3.8,12.2 L5.2,10.8 M10.8,5.2 L12.2,3.8" stroke-width="1.2"/></svg>
+            <span class="tooltip">Settings</span>
+        </button>
         <!-- Pie-specific buttons -->
         <button class="toolbar-btn toolbar-pie" id="tb-pie-add-slice" title="Add Slice" style="display:none">
             <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke-width="1.2"/><line x1="8" y1="8" x2="8" y2="2" stroke-width="1"/><line x1="8" y1="8" x2="13.2" y2="11" stroke-width="1"/><line x1="13" y1="13" x2="15" y2="13" stroke-width="1.3"/><line x1="14" y1="12" x2="14" y2="14" stroke-width="1.3"/></svg>
@@ -1068,7 +1101,7 @@
 
         // Unified toolbar visibility based on current diagram type
         function updateToolbarForDiagramType() {
-            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er', 'toolbar-gantt', 'toolbar-mindmap', 'toolbar-pie', 'toolbar-timeline', 'toolbar-journey', 'toolbar-quadrant'];
+            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er', 'toolbar-gantt', 'toolbar-mindmap', 'toolbar-pie', 'toolbar-timeline', 'toolbar-journey', 'toolbar-quadrant', 'toolbar-gitGraph'];
             const activeClass = 'toolbar-' + currentDiagramType;
             typeClasses.forEach(cls => {
                 document.querySelectorAll('.' + cls).forEach(btn => {
@@ -1078,7 +1111,7 @@
             // Hide the generic delete button for diagram types that have their own delete button
             const genericDelete = document.getElementById('tb-delete');
             if (genericDelete) {
-                const typesWithOwnDelete = ['mindmap', 'pie', 'timeline', 'journey', 'quadrant'];
+                const typesWithOwnDelete = ['mindmap', 'pie', 'timeline', 'journey', 'quadrant', 'gitGraph'];
                 genericDelete.style.display = typesWithOwnDelete.includes(currentDiagramType) ? 'none' : '';
             }
         }
@@ -5141,6 +5174,44 @@
                 if (typeof quadrantSelectedPoint !== 'undefined') {
                     quadrantSelectedPoint = null;
                     if (typeof renderQuadrantDiagram === 'function') renderQuadrantDiagram();
+                }
+            } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+                postMessage({ type: 'undo' });
+                e.preventDefault();
+            } else if (e.key === 'y' && (e.ctrlKey || e.metaKey)) {
+                postMessage({ type: 'redo' });
+                e.preventDefault();
+            }
+        });
+
+        // GitGraph toolbar buttons
+        document.getElementById('tb-gg-add-commit').addEventListener('click', function() { if (typeof createGitGraphCommand === 'function') createGitGraphCommand('commit'); });
+        document.getElementById('tb-gg-add-branch').addEventListener('click', function() { if (typeof createGitGraphCommand === 'function') createGitGraphCommand('branch'); });
+        document.getElementById('tb-gg-add-checkout').addEventListener('click', function() { if (typeof createGitGraphCommand === 'function') createGitGraphCommand('checkout'); });
+        document.getElementById('tb-gg-add-merge').addEventListener('click', function() { if (typeof createGitGraphCommand === 'function') createGitGraphCommand('merge'); });
+        document.getElementById('tb-gg-add-cherrypick').addEventListener('click', function() { if (typeof createGitGraphCommand === 'function') createGitGraphCommand('cherry-pick'); });
+        document.getElementById('tb-gg-edit').addEventListener('click', function() {
+            if (typeof ggSelectedCommand !== 'undefined' && ggSelectedCommand !== null && typeof editGitGraphCommand === 'function') editGitGraphCommand(ggSelectedCommand);
+        });
+        document.getElementById('tb-gg-delete').addEventListener('click', function() {
+            if (typeof ggSelectedCommand !== 'undefined' && ggSelectedCommand !== null && typeof deleteGitGraphCommand === 'function') deleteGitGraphCommand(ggSelectedCommand);
+        });
+        document.getElementById('tb-gg-settings').addEventListener('click', function() { if (typeof editGitGraphSettings === 'function') editGitGraphSettings(); });
+
+        // GitGraph keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (currentDiagramType !== 'gitGraph') return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (typeof ggSelectedCommand !== 'undefined' && ggSelectedCommand !== null && typeof deleteGitGraphCommand === 'function') {
+                    deleteGitGraphCommand(ggSelectedCommand);
+                }
+                e.preventDefault();
+            } else if (e.key === 'Escape') {
+                if (typeof ggSelectedCommand !== 'undefined') {
+                    ggSelectedCommand = null;
+                    if (typeof renderGitGraphDiagram === 'function') renderGitGraphDiagram();
                 }
             } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
                 postMessage({ type: 'undo' });
