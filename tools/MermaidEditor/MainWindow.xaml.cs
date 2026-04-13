@@ -5156,6 +5156,10 @@ Console.WriteLine(""Hello, World!"");
             {
                 await _visualEditorBridge.UpdateJourneyModelAsync(_currentJourneyModel);
             }
+            else if (_currentQuadrantChartModel != null)
+            {
+                await _visualEditorBridge.UpdateQuadrantChartModelAsync(_currentQuadrantChartModel);
+            }
             else if (_currentGitGraphModel != null)
             {
                 await _visualEditorBridge.UpdateGitGraphModelAsync(_currentGitGraphModel);
@@ -5770,6 +5774,10 @@ Console.WriteLine(""Hello, World!"");
                 else if (_currentJourneyModel != null)
                 {
                     text = MermaidSerializer.SerializeJourney(_currentJourneyModel);
+                }
+                else if (_currentQuadrantChartModel != null)
+                {
+                    text = MermaidSerializer.SerializeQuadrantChart(_currentQuadrantChartModel);
                 }
                 else if (_currentGitGraphModel != null)
                 {
