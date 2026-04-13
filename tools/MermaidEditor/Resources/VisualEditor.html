@@ -5050,6 +5050,13 @@
             if (stAddStartBtn) stAddStartBtn.disabled = !stDiagram || stDiagram.states.length < 1;
             const stAddEndBtn = document.getElementById('tb-st-add-end');
             if (stAddEndBtn) stAddEndBtn.disabled = !stDiagram || stDiagram.states.length < 1;
+
+            // GitGraph: Edit/Delete need a selected command
+            const ggEditBtn = document.getElementById('tb-gg-edit');
+            const ggDeleteBtn = document.getElementById('tb-gg-delete');
+            const ggHasSelection = typeof ggSelectedCommand !== 'undefined' && ggSelectedCommand !== null;
+            if (ggEditBtn) ggEditBtn.disabled = !ggHasSelection;
+            if (ggDeleteBtn) ggDeleteBtn.disabled = !ggHasSelection;
         }
 
         // Poll selection state every 200ms to keep toolbar buttons in sync
