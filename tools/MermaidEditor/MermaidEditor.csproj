@@ -26,6 +26,7 @@
       <EmbeddedResource Include="Resources\VisualEditor.Journey.js" />
       <EmbeddedResource Include="Resources\VisualEditor.Quadrant.js" />
       <EmbeddedResource Include="Resources\VisualEditor.GitGraph.js" />
+      <EmbeddedResource Include="Resources\VisualEditor.ZenUML.js" />
       <EmbeddedResource Include="Resources\WhatsNew.md" />
       <EmbeddedResource Include="Icons\*.svg" />
       <EmbeddedResource Include="Dictionaries\*.aff" />

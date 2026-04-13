@@ -3460,4 +3460,625 @@ public static class MermaidParser
 
         return foundDeclaration ? model : null;
     }
+
+    // =============================================
+    // ZenUML Parser
+    // =============================================
+
+    private static readonly Regex ZenUMLDeclaration = new(
+        @"^\s*zenuml\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex ZenUMLTitlePattern = new(
+        @"^\s*title\s+(.+)$", RegexOptions.Compiled);
+
+    private static readonly Regex ZenUMLAnnotatorPattern = new(
+        @"^\s*@(Actor|Boundary|Control|Entity|Database)\s+(\S+)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex ZenUMLAliasPattern = new(
+        @"^\s*(\S+)\s+as\s+(.+)$", RegexOptions.Compiled);
+
+    // Async message: A->B: message text
+    private static readonly Regex ZenUMLAsyncMessagePattern = new(
+        @"^\s*(\S+)\s*->\s*(\S+)\s*:\s*(.+)$", RegexOptions.Compiled);
+
+    // Sync call with arrow: A->B.method() or A->B.method(params)
+    private static readonly Regex ZenUMLSyncCallWithArrowPattern = new(
+        @"^\s*(\S+)\s*->\s*(\S+)\.(\S+?)(\(.*?\))?\s*(\{)?\s*$", RegexOptions.Compiled);
+
+    // Self call: A.method() or A.method(params)
+    private static readonly Regex ZenUMLSelfCallPattern = new(
+        @"^\s*(\S+)\.(\S+?)(\(.*?\))?\s*(\{)?\s*$", RegexOptions.Compiled);
+
+    // Creation: new A or new A(params)
+    private static readonly Regex ZenUMLCreationPattern = new(
+        @"^\s*new\s+(\S+?)(\(.*?\))?\s*(\{)?\s*$", RegexOptions.Compiled);
+
+    // Return: return value
+    private static readonly Regex ZenUMLReturnPattern = new(
+        @"^\s*return\s*(.*)?$", RegexOptions.Compiled);
+
+    // Fragment start: if(cond), while(cond), for(cond), forEach(cond), foreach(cond), loop(cond), opt, par, try
+    private static readonly Regex ZenUMLIfPattern = new(
+        @"^\s*if\s*\((.+)\)\s*\{\s*$", RegexOptions.Compiled);
+    private static readonly Regex ZenUMLElseIfPattern = new(
+        @"^\s*\}\s*else\s+if\s*\((.+)\)\s*\{\s*$", RegexOptions.Compiled);
+    private static readonly Regex ZenUMLElsePattern = new(
+        @"^\s*\}\s*else\s*\{\s*$", RegexOptions.Compiled);
+    private static readonly Regex ZenUMLWhilePattern = new(
+        @"^\s*(while|for|forEach|foreach|loop)\s*\((.+)\)\s*\{\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex ZenUMLOptPattern = new(
+        @"^\s*opt\s*\{\s*$", RegexOptions.Compiled);
+    private static readonly Regex ZenUMLParPattern = new(
+        @"^\s*par\s*\{\s*$", RegexOptions.Compiled);
+    private static readonly Regex ZenUMLTryPattern = new(
+        @"^\s*try\s*\{\s*$", RegexOptions.Compiled);
+    private static readonly Regex ZenUMLCatchPattern = new(
+        @"^\s*\}\s*catch\s*\{\s*$", RegexOptions.Compiled);
+    private static readonly Regex ZenUMLFinallyPattern = new(
+        @"^\s*\}\s*finally\s*\{\s*$", RegexOptions.Compiled);
+
+    // Comment: // text
+    private static readonly Regex ZenUMLCommentPattern = new(
+        @"^\s*//\s*(.*)$", RegexOptions.Compiled);
+
+    // Variable assignment with return: Type? varName = A.method()
+    private static readonly Regex ZenUMLAssignmentPattern = new(
+        @"^\s*(?:(\w+)\s+)?(\w+)\s*=\s*(\S+)\.(\S+?)(\(.*?\))?\s*(\{)?\s*$", RegexOptions.Compiled);
+
+    // Closing brace
+    private static readonly Regex ZenUMLCloseBracePattern = new(
+        @"^\s*\}\s*$", RegexOptions.Compiled);
+
+    // Explicit participant (plain name on a line by itself, no special chars)
+    private static readonly Regex ZenUMLPlainParticipantPattern = new(
+        @"^\s*([A-Za-z_]\w*)\s*$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses a ZenUML diagram into a ZenUMLModel.
+    /// </summary>
+    public static ZenUMLModel? ParseZenUML(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new ZenUMLModel();
+        var knownParticipants = new HashSet<string>(StringComparer.Ordinal);
+        bool foundDeclaration = false;
+
+        // Collect all lines after declaration for block-aware parsing
+        var bodyLines = new List<string>();
+        var bodyStartIndex = -1;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                if (foundDeclaration) bodyLines.Add(line);
+                continue;
+            }
+
+            if (!foundDeclaration)
+            {
+                var declMatch = ZenUMLDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    model.DeclarationLineIndex = i;
+                    foundDeclaration = true;
+                    bodyStartIndex = i + 1;
+                    continue;
+                }
+
+                // Check for %% comments before declaration
+                var preComment = CommentPattern.Match(line);
+                if (preComment.Success)
+                {
+                    model.Comments.Add(new CommentEntry
+                    {
+                        Text = preComment.Groups[1].Value,
+                        OriginalLineIndex = i
+                    });
+                    continue;
+                }
+
+                model.PreambleLines.Add(line);
+                continue;
+            }
+
+            bodyLines.Add(line);
+        }
+
+        if (!foundDeclaration)
+            return null;
+
+        // Parse body lines with brace-aware nesting
+        ParseZenUMLBody(bodyLines, model, knownParticipants);
+
+        return model;
+    }
+
+    /// <summary>
+    /// Parses the body of a ZenUML diagram (lines after the declaration).
+    /// </summary>
+    private static void ParseZenUMLBody(List<string> lines, ZenUMLModel model, HashSet<string> knownParticipants)
+    {
+        int idx = 0;
+        ParseZenUMLElements(lines, ref idx, model.Elements, model, knownParticipants, false);
+    }
+
+    /// <summary>
+    /// Recursively parses ZenUML elements from lines, handling nested blocks.
+    /// </summary>
+    private static void ParseZenUMLElements(List<string> lines, ref int idx, List<ZenUMLElement> elements,
+        ZenUMLModel model, HashSet<string> knownParticipants, bool insideBlock)
+    {
+        while (idx < lines.Count)
+        {
+            var line = lines[idx];
+            var trimmed = line.Trim();
+
+            // Skip empty lines
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                idx++;
+                continue;
+            }
+
+            // Closing brace - return from current block
+            if (ZenUMLCloseBracePattern.IsMatch(trimmed))
+            {
+                if (insideBlock)
+                {
+                    idx++;
+                    return;
+                }
+                idx++;
+                continue;
+            }
+
+            // Check for } else if (...) { - must be handled by fragment caller
+            if (ZenUMLElseIfPattern.IsMatch(trimmed) || ZenUMLElsePattern.IsMatch(trimmed) ||
+                ZenUMLCatchPattern.IsMatch(trimmed) || ZenUMLFinallyPattern.IsMatch(trimmed))
+            {
+                // Return to let the fragment handler process this
+                return;
+            }
+
+            // Title
+            var titleMatch = ZenUMLTitlePattern.Match(trimmed);
+            if (titleMatch.Success)
+            {
+                model.Title = titleMatch.Groups[1].Value.Trim().Trim('"');
+                idx++;
+                continue;
+            }
+
+            // ZenUML comments (// style)
+            var commentMatch = ZenUMLCommentPattern.Match(trimmed);
+            if (commentMatch.Success)
+            {
+                elements.Add(new ZenUMLComment { Text = commentMatch.Groups[1].Value });
+                idx++;
+                continue;
+            }
+
+            // Mermaid comments (%% style)
+            var mermaidComment = CommentPattern.Match(line);
+            if (mermaidComment.Success)
+            {
+                model.Comments.Add(new CommentEntry
+                {
+                    Text = mermaidComment.Groups[1].Value,
+                    OriginalLineIndex = idx
+                });
+                idx++;
+                continue;
+            }
+
+            // Annotator declaration: @Actor Alice, @Database Bob, etc.
+            var annotatorMatch = ZenUMLAnnotatorPattern.Match(trimmed);
+            if (annotatorMatch.Success)
+            {
+                var annotator = annotatorMatch.Groups[1].Value switch
+                {
+                    "Actor" or "actor" => ZenUMLAnnotator.Actor,
+                    "Boundary" or "boundary" => ZenUMLAnnotator.Boundary,
+                    "Control" or "control" => ZenUMLAnnotator.Control,
+                    "Entity" or "entity" => ZenUMLAnnotator.Entity,
+                    "Database" or "database" => ZenUMLAnnotator.Database,
+                    _ => ZenUMLAnnotator.None
+                };
+                var id = annotatorMatch.Groups[2].Value;
+                EnsureZenUMLParticipant(model, knownParticipants, id, annotator: annotator, isExplicit: true);
+                idx++;
+                continue;
+            }
+
+            // Alias: A as Alice
+            var aliasMatch = ZenUMLAliasPattern.Match(trimmed);
+            if (aliasMatch.Success)
+            {
+                var id = aliasMatch.Groups[1].Value;
+                var alias = aliasMatch.Groups[2].Value.Trim();
+                EnsureZenUMLParticipant(model, knownParticipants, id, alias: alias, isExplicit: true);
+                idx++;
+                continue;
+            }
+
+            // If fragment: if(condition) {
+            var ifMatch = ZenUMLIfPattern.Match(trimmed);
+            if (ifMatch.Success)
+            {
+                var fragment = new ZenUMLFragment
+                {
+                    Type = ZenUMLFragmentType.If,
+                    Label = ifMatch.Groups[1].Value.Trim()
+                };
+                var section = new ZenUMLFragmentSection
+                {
+                    Keyword = "if",
+                    Label = ifMatch.Groups[1].Value.Trim()
+                };
+                fragment.Sections.Add(section);
+                idx++;
+
+                // Parse the if body
+                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true);
+
+                // Check for else if / else continuations
+                while (idx < lines.Count)
+                {
+                    var nextTrimmed = lines[idx].Trim();
+
+                    var elseIfMatch = ZenUMLElseIfPattern.Match(nextTrimmed);
+                    if (elseIfMatch.Success)
+                    {
+                        var elseIfSection = new ZenUMLFragmentSection
+                        {
+                            Keyword = "else if",
+                            Label = elseIfMatch.Groups[1].Value.Trim()
+                        };
+                        fragment.Sections.Add(elseIfSection);
+                        idx++;
+                        ParseZenUMLElements(lines, ref idx, elseIfSection.Elements, model, knownParticipants, true);
+                        continue;
+                    }
+
+                    var elseMatch = ZenUMLElsePattern.Match(nextTrimmed);
+                    if (elseMatch.Success)
+                    {
+                        var elseSection = new ZenUMLFragmentSection
+                        {
+                            Keyword = "else",
+                            Label = null
+                        };
+                        fragment.Sections.Add(elseSection);
+                        idx++;
+                        ParseZenUMLElements(lines, ref idx, elseSection.Elements, model, knownParticipants, true);
+                        continue;
+                    }
+
+                    break;
+                }
+
+                elements.Add(fragment);
+                continue;
+            }
+
+            // While/for/forEach/loop fragment
+            var whileMatch = ZenUMLWhilePattern.Match(trimmed);
+            if (whileMatch.Success)
+            {
+                var keyword = whileMatch.Groups[1].Value.ToLowerInvariant();
+                var fragType = keyword switch
+                {
+                    "while" => ZenUMLFragmentType.While,
+                    "for" => ZenUMLFragmentType.For,
+                    "foreach" => ZenUMLFragmentType.ForEach,
+                    "loop" => ZenUMLFragmentType.Loop,
+                    _ => ZenUMLFragmentType.While
+                };
+                var fragment = new ZenUMLFragment
+                {
+                    Type = fragType,
+                    Label = whileMatch.Groups[2].Value.Trim()
+                };
+                var section = new ZenUMLFragmentSection
+                {
+                    Keyword = keyword,
+                    Label = whileMatch.Groups[2].Value.Trim()
+                };
+                fragment.Sections.Add(section);
+                idx++;
+                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true);
+                elements.Add(fragment);
+                continue;
+            }
+
+            // Opt fragment
+            if (ZenUMLOptPattern.IsMatch(trimmed))
+            {
+                var fragment = new ZenUMLFragment
+                {
+                    Type = ZenUMLFragmentType.Opt,
+                    Label = ""
+                };
+                var section = new ZenUMLFragmentSection { Keyword = "opt" };
+                fragment.Sections.Add(section);
+                idx++;
+                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true);
+                elements.Add(fragment);
+                continue;
+            }
+
+            // Par fragment
+            if (ZenUMLParPattern.IsMatch(trimmed))
+            {
+                var fragment = new ZenUMLFragment
+                {
+                    Type = ZenUMLFragmentType.Par,
+                    Label = ""
+                };
+                var section = new ZenUMLFragmentSection { Keyword = "par" };
+                fragment.Sections.Add(section);
+                idx++;
+                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true);
+                elements.Add(fragment);
+                continue;
+            }
+
+            // Try fragment
+            if (ZenUMLTryPattern.IsMatch(trimmed))
+            {
+                var fragment = new ZenUMLFragment
+                {
+                    Type = ZenUMLFragmentType.Try,
+                    Label = ""
+                };
+                var section = new ZenUMLFragmentSection { Keyword = "try" };
+                fragment.Sections.Add(section);
+                idx++;
+                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true);
+
+                // Check for catch/finally
+                while (idx < lines.Count)
+                {
+                    var nextTrimmed = lines[idx].Trim();
+
+                    if (ZenUMLCatchPattern.IsMatch(nextTrimmed))
+                    {
+                        var catchSection = new ZenUMLFragmentSection { Keyword = "catch" };
+                        fragment.Sections.Add(catchSection);
+                        idx++;
+                        ParseZenUMLElements(lines, ref idx, catchSection.Elements, model, knownParticipants, true);
+                        continue;
+                    }
+
+                    if (ZenUMLFinallyPattern.IsMatch(nextTrimmed))
+                    {
+                        var finallySection = new ZenUMLFragmentSection { Keyword = "finally" };
+                        fragment.Sections.Add(finallySection);
+                        idx++;
+                        ParseZenUMLElements(lines, ref idx, finallySection.Elements, model, knownParticipants, true);
+                        continue;
+                    }
+
+                    break;
+                }
+
+                elements.Add(fragment);
+                continue;
+            }
+
+            // Return statement
+            var returnMatch = ZenUMLReturnPattern.Match(trimmed);
+            if (returnMatch.Success)
+            {
+                elements.Add(new ZenUMLReturn { Value = returnMatch.Groups[1].Value.Trim().Trim('"') });
+                idx++;
+                continue;
+            }
+
+            // Creation: new A or new A(params)
+            var creationMatch = ZenUMLCreationPattern.Match(trimmed);
+            if (creationMatch.Success)
+            {
+                var targetId = creationMatch.Groups[1].Value;
+                var hasBlock = creationMatch.Groups[3].Success && creationMatch.Groups[3].Value == "{";
+                EnsureZenUMLParticipant(model, knownParticipants, targetId);
+                var msg = new ZenUMLMessage
+                {
+                    ToId = targetId,
+                    Text = "new " + targetId + (creationMatch.Groups[2].Success ? creationMatch.Groups[2].Value : ""),
+                    MessageType = ZenUMLMessageType.Creation,
+                    HasBlock = hasBlock
+                };
+                if (hasBlock)
+                {
+                    idx++;
+                    ParseZenUMLElements(lines, ref idx, msg.NestedElements, model, knownParticipants, true);
+                }
+                else
+                {
+                    idx++;
+                }
+                elements.Add(msg);
+                continue;
+            }
+
+            // Variable assignment: [Type] var = A.method()
+            var assignMatch = ZenUMLAssignmentPattern.Match(trimmed);
+            if (assignMatch.Success)
+            {
+                var targetId = assignMatch.Groups[3].Value;
+                var methodName = assignMatch.Groups[4].Value;
+                var paramsStr = assignMatch.Groups[5].Success ? assignMatch.Groups[5].Value : "()";
+                var hasBlock = assignMatch.Groups[6].Success && assignMatch.Groups[6].Value == "{";
+                var varName = assignMatch.Groups[2].Value;
+
+                EnsureZenUMLParticipant(model, knownParticipants, targetId);
+                var msg = new ZenUMLMessage
+                {
+                    ToId = targetId,
+                    Text = methodName + paramsStr,
+                    MessageType = ZenUMLMessageType.SelfCall,
+                    HasBlock = hasBlock
+                };
+                if (hasBlock)
+                {
+                    idx++;
+                    ParseZenUMLElements(lines, ref idx, msg.NestedElements, model, knownParticipants, true);
+                }
+                else
+                {
+                    idx++;
+                }
+                elements.Add(msg);
+                continue;
+            }
+
+            // Async message: A->B: message text
+            var asyncMatch = ZenUMLAsyncMessagePattern.Match(trimmed);
+            if (asyncMatch.Success)
+            {
+                var fromId = asyncMatch.Groups[1].Value;
+                var toId = asyncMatch.Groups[2].Value;
+                var text = asyncMatch.Groups[3].Value.Trim();
+                EnsureZenUMLParticipant(model, knownParticipants, fromId);
+                EnsureZenUMLParticipant(model, knownParticipants, toId);
+                elements.Add(new ZenUMLMessage
+                {
+                    FromId = fromId,
+                    ToId = toId,
+                    Text = text,
+                    MessageType = ZenUMLMessageType.Async
+                });
+                idx++;
+                continue;
+            }
+
+            // Sync call with arrow: A->B.method()
+            var syncArrowMatch = ZenUMLSyncCallWithArrowPattern.Match(trimmed);
+            if (syncArrowMatch.Success)
+            {
+                var fromId = syncArrowMatch.Groups[1].Value;
+                var toId = syncArrowMatch.Groups[2].Value;
+                var methodName = syncArrowMatch.Groups[3].Value;
+                var paramsStr = syncArrowMatch.Groups[4].Success ? syncArrowMatch.Groups[4].Value : "()";
+                var hasBlock = syncArrowMatch.Groups[5].Success && syncArrowMatch.Groups[5].Value == "{";
+                EnsureZenUMLParticipant(model, knownParticipants, fromId);
+                EnsureZenUMLParticipant(model, knownParticipants, toId);
+                var msg = new ZenUMLMessage
+                {
+                    FromId = fromId,
+                    ToId = toId,
+                    Text = methodName + paramsStr,
+                    MessageType = ZenUMLMessageType.Sync,
+                    HasBlock = hasBlock
+                };
+                if (hasBlock)
+                {
+                    idx++;
+                    ParseZenUMLElements(lines, ref idx, msg.NestedElements, model, knownParticipants, true);
+                }
+                else
+                {
+                    idx++;
+                }
+                elements.Add(msg);
+                continue;
+            }
+
+            // Self call: A.method()
+            var selfCallMatch = ZenUMLSelfCallPattern.Match(trimmed);
+            if (selfCallMatch.Success)
+            {
+                var targetId = selfCallMatch.Groups[1].Value;
+                var methodName = selfCallMatch.Groups[2].Value;
+                var paramsStr = selfCallMatch.Groups[3].Success ? selfCallMatch.Groups[3].Value : "()";
+                var hasBlock = selfCallMatch.Groups[4].Success && selfCallMatch.Groups[4].Value == "{";
+                EnsureZenUMLParticipant(model, knownParticipants, targetId);
+                var msg = new ZenUMLMessage
+                {
+                    FromId = targetId,
+                    ToId = targetId,
+                    Text = methodName + paramsStr,
+                    MessageType = ZenUMLMessageType.SelfCall,
+                    HasBlock = hasBlock
+                };
+                if (hasBlock)
+                {
+                    idx++;
+                    ParseZenUMLElements(lines, ref idx, msg.NestedElements, model, knownParticipants, true);
+                }
+                else
+                {
+                    idx++;
+                }
+                elements.Add(msg);
+                continue;
+            }
+
+            // Plain participant declaration (just a name on a line)
+            var plainMatch = ZenUMLPlainParticipantPattern.Match(trimmed);
+            if (plainMatch.Success)
+            {
+                var id = plainMatch.Groups[1].Value;
+                // Don't treat ZenUML keywords as participants
+                if (!IsZenUMLKeyword(id))
+                {
+                    EnsureZenUMLParticipant(model, knownParticipants, id, isExplicit: true);
+                }
+                idx++;
+                continue;
+            }
+
+            // Unknown line - skip
+            idx++;
+        }
+    }
+
+    /// <summary>
+    /// Ensures a ZenUML participant exists in the model.
+    /// </summary>
+    private static void EnsureZenUMLParticipant(ZenUMLModel model, HashSet<string> known, string id,
+        string? alias = null, ZenUMLAnnotator annotator = ZenUMLAnnotator.None, bool isExplicit = false)
+    {
+        if (string.IsNullOrEmpty(id)) return;
+
+        if (known.Add(id))
+        {
+            model.Participants.Add(new ZenUMLParticipant
+            {
+                Id = id,
+                Alias = alias,
+                Annotator = annotator,
+                IsExplicit = isExplicit
+            });
+        }
+        else if (isExplicit)
+        {
+            // Update existing participant
+            var existing = model.Participants.Find(p => p.Id == id);
+            if (existing != null)
+            {
+                existing.IsExplicit = true;
+                if (alias != null) existing.Alias = alias;
+                if (annotator != ZenUMLAnnotator.None) existing.Annotator = annotator;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks whether a string is a ZenUML keyword (not a participant name).
+    /// </summary>
+    private static bool IsZenUMLKeyword(string word)
+    {
+        return word is "if" or "else" or "while" or "for" or "forEach" or "foreach" or "loop"
+            or "opt" or "par" or "try" or "catch" or "finally" or "return" or "new"
+            or "title" or "zenuml";
+    }
 }

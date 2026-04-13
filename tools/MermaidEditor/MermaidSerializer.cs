@@ -2149,4 +2149,252 @@ public static class MermaidSerializer
             }
         }
     }
+
+    // =============================================
+    // ZenUML Serializer
+    // =============================================
+
+    /// <summary>
+    /// Serializes a ZenUMLModel to valid Mermaid ZenUML text.
+    /// </summary>
+    public static string SerializeZenUML(ZenUMLModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments before declaration
+        WriteZenUMLCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write the zenuml declaration
+        sb.AppendLine("zenuml");
+
+        // Write title
+        if (!string.IsNullOrEmpty(model.Title))
+        {
+            sb.AppendLine($"{Indent}title {model.Title}");
+        }
+
+        // Write explicit participant declarations
+        foreach (var participant in model.Participants.Where(p => p.IsExplicit))
+        {
+            if (participant.Annotator != ZenUMLAnnotator.None)
+            {
+                sb.AppendLine($"{Indent}@{participant.Annotator} {participant.Id}");
+            }
+            else if (!string.IsNullOrEmpty(participant.Alias))
+            {
+                sb.AppendLine($"{Indent}{participant.Id} as {participant.Alias}");
+            }
+            else
+            {
+                sb.AppendLine($"{Indent}{participant.Id}");
+            }
+        }
+
+        // Write all elements
+        WriteZenUMLElements(sb, model.Elements, Indent);
+
+        // Write trailing comments
+        WriteZenUMLTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Writes ZenUML elements with proper indentation, handling nested blocks.
+    /// </summary>
+    private static void WriteZenUMLElements(StringBuilder sb, List<ZenUMLElement> elements, string indent)
+    {
+        foreach (var element in elements)
+        {
+            switch (element)
+            {
+                case ZenUMLComment comment:
+                    sb.AppendLine($"{indent}// {comment.Text}");
+                    break;
+
+                case ZenUMLReturn ret:
+                    if (!string.IsNullOrEmpty(ret.Value))
+                        sb.AppendLine($"{indent}return {ret.Value}");
+                    else
+                        sb.AppendLine($"{indent}return");
+                    break;
+
+                case ZenUMLMessage msg:
+                    WriteZenUMLMessage(sb, msg, indent);
+                    break;
+
+                case ZenUMLFragment fragment:
+                    WriteZenUMLFragment(sb, fragment, indent);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Writes a single ZenUML message line.
+    /// </summary>
+    private static void WriteZenUMLMessage(StringBuilder sb, ZenUMLMessage msg, string indent)
+    {
+        switch (msg.MessageType)
+        {
+            case ZenUMLMessageType.Async:
+                sb.Append($"{indent}{msg.FromId}->{msg.ToId}: {msg.Text}");
+                sb.AppendLine();
+                break;
+
+            case ZenUMLMessageType.Sync:
+                if (!string.IsNullOrEmpty(msg.FromId) && msg.FromId != msg.ToId)
+                {
+                    sb.Append($"{indent}{msg.FromId}->{msg.ToId}.{msg.Text}");
+                }
+                else
+                {
+                    sb.Append($"{indent}{msg.ToId}.{msg.Text}");
+                }
+                if (msg.HasBlock && msg.NestedElements.Count > 0)
+                {
+                    sb.AppendLine(" {");
+                    WriteZenUMLElements(sb, msg.NestedElements, indent + Indent);
+                    sb.AppendLine($"{indent}}}");
+                }
+                else if (msg.HasBlock)
+                {
+                    sb.AppendLine(" {");
+                    sb.AppendLine($"{indent}}}");
+                }
+                else
+                {
+                    sb.AppendLine();
+                }
+                break;
+
+            case ZenUMLMessageType.SelfCall:
+                sb.Append($"{indent}{msg.ToId}.{msg.Text}");
+                if (msg.HasBlock && msg.NestedElements.Count > 0)
+                {
+                    sb.AppendLine(" {");
+                    WriteZenUMLElements(sb, msg.NestedElements, indent + Indent);
+                    sb.AppendLine($"{indent}}}");
+                }
+                else if (msg.HasBlock)
+                {
+                    sb.AppendLine(" {");
+                    sb.AppendLine($"{indent}}}");
+                }
+                else
+                {
+                    sb.AppendLine();
+                }
+                break;
+
+            case ZenUMLMessageType.Creation:
+                sb.Append($"{indent}{msg.Text}");
+                if (msg.HasBlock && msg.NestedElements.Count > 0)
+                {
+                    sb.AppendLine(" {");
+                    WriteZenUMLElements(sb, msg.NestedElements, indent + Indent);
+                    sb.AppendLine($"{indent}}}");
+                }
+                else
+                {
+                    sb.AppendLine();
+                }
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Writes a ZenUML fragment (if/else, while, try/catch, etc.).
+    /// </summary>
+    private static void WriteZenUMLFragment(StringBuilder sb, ZenUMLFragment fragment, string indent)
+    {
+        for (int i = 0; i < fragment.Sections.Count; i++)
+        {
+            var section = fragment.Sections[i];
+            var keyword = section.Keyword ?? "";
+
+            switch (keyword)
+            {
+                case "if":
+                    sb.AppendLine($"{indent}if({section.Label}) {{");
+                    break;
+                case "else if":
+                    sb.AppendLine($"{indent}}} else if({section.Label}) {{");
+                    break;
+                case "else":
+                    sb.AppendLine($"{indent}}} else {{");
+                    break;
+                case "while":
+                case "for":
+                case "forEach":
+                case "foreach":
+                case "loop":
+                    sb.AppendLine($"{indent}{keyword}({section.Label}) {{");
+                    break;
+                case "opt":
+                    sb.AppendLine($"{indent}opt {{");
+                    break;
+                case "par":
+                    sb.AppendLine($"{indent}par {{");
+                    break;
+                case "try":
+                    sb.AppendLine($"{indent}try {{");
+                    break;
+                case "catch":
+                    sb.AppendLine($"{indent}}} catch {{");
+                    break;
+                case "finally":
+                    sb.AppendLine($"{indent}}} finally {{");
+                    break;
+                default:
+                    sb.AppendLine($"{indent}{keyword} {{");
+                    break;
+            }
+
+            WriteZenUMLElements(sb, section.Elements, indent + Indent);
+
+            // Close brace only for the last section
+            if (i == fragment.Sections.Count - 1)
+            {
+                sb.AppendLine($"{indent}}}");
+            }
+        }
+    }
+
+    private static void WriteZenUMLCommentsBeforeLine(StringBuilder sb, ZenUMLModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    private static void WriteZenUMLTrailingComments(StringBuilder sb, ZenUMLModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
 }

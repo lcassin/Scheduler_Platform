@@ -1983,3 +1983,224 @@ public class GitGraphCommand
     /// </summary>
     public string? Parent { get; set; }
 }
+
+// =============================================
+// ZenUML Models
+// =============================================
+
+/// <summary>
+/// Represents a Mermaid ZenUML sequence diagram.
+/// ZenUML uses a code-like syntax for sequence diagrams with
+/// method calls, if/else, while, try/catch, etc.
+/// </summary>
+public class ZenUMLModel
+{
+    /// <summary>
+    /// The diagram title (optional).
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// All participants in the diagram, in order of appearance.
+    /// </summary>
+    public List<ZenUMLParticipant> Participants { get; set; } = new();
+
+    /// <summary>
+    /// All top-level elements in the diagram.
+    /// </summary>
+    public List<ZenUMLElement> Elements { get; set; } = new();
+
+    /// <summary>
+    /// Comments preserved from the original text.
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines before the zenuml declaration.
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The line index of the zenuml declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+}
+
+/// <summary>
+/// Represents a participant in a ZenUML diagram.
+/// </summary>
+public class ZenUMLParticipant
+{
+    /// <summary>
+    /// The unique identifier for this participant.
+    /// </summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The display alias/label. If null, Id is used.
+    /// </summary>
+    public string? Alias { get; set; }
+
+    /// <summary>
+    /// The annotator type (@Actor, @Database, @Boundary, @Control, @Entity, or None for plain).
+    /// </summary>
+    public ZenUMLAnnotator Annotator { get; set; } = ZenUMLAnnotator.None;
+
+    /// <summary>
+    /// Whether this participant was explicitly declared.
+    /// </summary>
+    public bool IsExplicit { get; set; }
+
+    /// <summary>
+    /// Returns the effective display label.
+    /// </summary>
+    public string DisplayLabel => Alias ?? Id;
+}
+
+/// <summary>
+/// ZenUML participant annotator types.
+/// </summary>
+public enum ZenUMLAnnotator
+{
+    None,
+    Actor,
+    Boundary,
+    Control,
+    Entity,
+    Database
+}
+
+/// <summary>
+/// Base class for all elements in a ZenUML diagram.
+/// </summary>
+public abstract class ZenUMLElement { }
+
+/// <summary>
+/// Represents a message (method call or async message) in a ZenUML diagram.
+/// </summary>
+public class ZenUMLMessage : ZenUMLElement
+{
+    /// <summary>
+    /// The source participant ID. Empty for self-calls.
+    /// </summary>
+    public string FromId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The target participant ID.
+    /// </summary>
+    public string ToId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The message text (method name, message text, etc.).
+    /// </summary>
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The message type (Sync, Async, Creation, SelfCall).
+    /// </summary>
+    public ZenUMLMessageType MessageType { get; set; } = ZenUMLMessageType.Async;
+
+    /// <summary>
+    /// Nested elements inside a sync call block (e.g., A->B.method() { ... }).
+    /// </summary>
+    public List<ZenUMLElement> NestedElements { get; set; } = new();
+
+    /// <summary>
+    /// Whether this message has a nested block (braces).
+    /// </summary>
+    public bool HasBlock { get; set; }
+}
+
+/// <summary>
+/// ZenUML message types.
+/// </summary>
+public enum ZenUMLMessageType
+{
+    /// <summary>Sync call: A->B.method() or A.method()</summary>
+    Sync,
+    /// <summary>Async message: A->B: message text</summary>
+    Async,
+    /// <summary>Creation: new A or new A(params)</summary>
+    Creation,
+    /// <summary>Self-call: A.method() (no arrow, target is self)</summary>
+    SelfCall
+}
+
+/// <summary>
+/// Represents a return statement in a ZenUML diagram.
+/// </summary>
+public class ZenUMLReturn : ZenUMLElement
+{
+    /// <summary>
+    /// The return value text.
+    /// </summary>
+    public string Value { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Represents a fragment (if/else, while, try/catch, opt, par) in a ZenUML diagram.
+/// </summary>
+public class ZenUMLFragment : ZenUMLElement
+{
+    /// <summary>
+    /// The fragment type.
+    /// </summary>
+    public ZenUMLFragmentType Type { get; set; }
+
+    /// <summary>
+    /// The label/condition text.
+    /// </summary>
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The sections within the fragment (e.g., if section, else if sections, else section).
+    /// </summary>
+    public List<ZenUMLFragmentSection> Sections { get; set; } = new();
+}
+
+/// <summary>
+/// A section within a ZenUML fragment.
+/// </summary>
+public class ZenUMLFragmentSection
+{
+    /// <summary>
+    /// The section keyword (e.g., "if", "else if", "else", "catch", "finally").
+    /// </summary>
+    public string? Keyword { get; set; }
+
+    /// <summary>
+    /// The label/condition for this section.
+    /// </summary>
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// The elements contained within this section.
+    /// </summary>
+    public List<ZenUMLElement> Elements { get; set; } = new();
+}
+
+/// <summary>
+/// ZenUML fragment types.
+/// </summary>
+public enum ZenUMLFragmentType
+{
+    If,
+    While,
+    For,
+    ForEach,
+    Loop,
+    Opt,
+    Par,
+    Try
+}
+
+/// <summary>
+/// Represents a comment in a ZenUML diagram that should be rendered.
+/// </summary>
+public class ZenUMLComment : ZenUMLElement
+{
+    /// <summary>
+    /// The comment text (without the // prefix).
+    /// </summary>
+    public string Text { get; set; } = string.Empty;
+}

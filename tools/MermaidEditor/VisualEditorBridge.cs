@@ -21,7 +21,8 @@ public enum ActiveDiagramType
     Timeline,
     Journey,
     QuadrantChart,
-    GitGraph
+    GitGraph,
+    ZenUML
 }
 
 /// <summary>
@@ -261,6 +262,12 @@ public partial class VisualEditorBridge
                 await RestoreGitGraphToEditorAsync();
                 RaiseGitGraphModelChanged("undo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.ZenUML)
+            {
+                RestoreZenUMLModelFromJson(previousJson);
+                await RestoreZenUMLToEditorAsync();
+                RaiseZenUMLModelChanged("undo");
+            }
             else
             {
                 RestoreModelFromJson(previousJson);
@@ -360,6 +367,12 @@ public partial class VisualEditorBridge
                 await RestoreGitGraphToEditorAsync();
                 RaiseGitGraphModelChanged("redo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.ZenUML)
+            {
+                RestoreZenUMLModelFromJson(redoJson);
+                await RestoreZenUMLToEditorAsync();
+                RaiseZenUMLModelChanged("redo");
+            }
             else
             {
                 RestoreModelFromJson(redoJson);
@@ -400,6 +413,8 @@ public partial class VisualEditorBridge
             return ConvertQuadrantChartModelToJson(_quadrantChartModel);
         if (_activeDiagramType == ActiveDiagramType.GitGraph && _gitGraphModel != null)
             return ConvertGitGraphModelToJson(_gitGraphModel);
+        if (_activeDiagramType == ActiveDiagramType.ZenUML && _zenUMLModel != null)
+            return ConvertZenUMLModelToJson(_zenUMLModel);
         return ConvertModelToJson(_model);
     }
 
@@ -998,6 +1013,73 @@ public partial class VisualEditorBridge
 
                 case "gg_settingsChanged":
                     HandleGitGraphSettingsChanged(root);
+                    break;
+
+                // ===== ZenUML Messages =====
+
+                case "zu_participantCreated":
+                    HandleZenUMLParticipantCreated(root);
+                    break;
+
+                case "zu_participantEdited":
+                    HandleZenUMLParticipantEdited(root);
+                    break;
+
+                case "zu_participantDeleted":
+                    HandleZenUMLParticipantDeleted(root);
+                    break;
+
+                case "zu_participantReordered":
+                    HandleZenUMLParticipantReordered(root);
+                    break;
+
+                case "zu_messageCreated":
+                    HandleZenUMLMessageCreated(root);
+                    break;
+
+                case "zu_messageEdited":
+                    HandleZenUMLMessageEdited(root);
+                    break;
+
+                case "zu_messageDeleted":
+                    HandleZenUMLMessageDeleted(root);
+                    break;
+
+                case "zu_returnCreated":
+                    HandleZenUMLReturnCreated(root);
+                    break;
+
+                case "zu_returnEdited":
+                    HandleZenUMLReturnEdited(root);
+                    break;
+
+                case "zu_returnDeleted":
+                    HandleZenUMLReturnDeleted(root);
+                    break;
+
+                case "zu_fragmentCreated":
+                    HandleZenUMLFragmentCreated(root);
+                    break;
+
+                case "zu_fragmentEdited":
+                    HandleZenUMLFragmentEdited(root);
+                    break;
+
+                case "zu_fragmentDeleted":
+                    HandleZenUMLFragmentDeleted(root);
+                    break;
+
+                case "zu_elementReordered":
+                    HandleZenUMLElementReordered(root);
+                    break;
+
+                case "zu_settingsChanged":
+                    HandleZenUMLSettingsChanged(root);
+                    break;
+
+                case "zu_participantSelected":
+                case "zu_messageSelected":
+                case "zu_fragmentSelected":
                     break;
             }
         }
