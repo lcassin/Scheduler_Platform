@@ -6,6 +6,7 @@
 // ========== XY Chart State ==========
 let xyModel = null;
 let xySelectedSeries = null; // index of selected series or null
+let xySelectedDataPoint = null; // { seriesIndex, dataIndex } or null - individual data point selection
 let xyClipboard = null; // { type: 'series', data: {...} }
 
 // ========== XY Chart Load/Restore ==========
@@ -121,6 +122,7 @@ function renderXYChart() {
     bg.addEventListener('click', (e) => {
         if (e.target === bg) {
             xySelectedSeries = null;
+            xySelectedDataPoint = null;
             renderXYChart();
             _xyUpdateToolbarSelection();
         }
@@ -262,10 +264,17 @@ function renderXYChart() {
                         rect.setAttribute('stroke', isLight ? '#ff9800' : '#f9e2af');
                         rect.setAttribute('stroke-width', '2');
                     }
+                    // Highlight individual selected data point
+                    const isPointSelected = xySelectedDataPoint && xySelectedDataPoint.seriesIndex === si && xySelectedDataPoint.dataIndex === di;
+                    if (isPointSelected) {
+                        rect.setAttribute('stroke', isLight ? '#e91e63' : '#f38ba8');
+                        rect.setAttribute('stroke-width', '3');
+                        rect.setAttribute('opacity', '1');
+                    }
                     rect.style.cursor = 'pointer';
-                    rect.addEventListener('click', (e) => { e.stopPropagation(); selectXYSeries(si); });
-                    rect.addEventListener('dblclick', (e) => { e.stopPropagation(); editXYChartSeries(si); });
-                    rect.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); showXYChartContextMenu(e, si); });
+                    rect.addEventListener('click', (e) => { e.stopPropagation(); selectXYDataPoint(si, di); });
+                    rect.addEventListener('dblclick', (e) => { e.stopPropagation(); editXYDataPoint(si, di); });
+                    rect.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); showXYChartContextMenu(e, si, di); });
                     svg.appendChild(rect);
                 });
             } else {
@@ -306,10 +315,17 @@ function renderXYChart() {
                         dot.setAttribute('stroke', isLight ? '#ff9800' : '#f9e2af');
                         dot.setAttribute('stroke-width', '2');
                     }
+                    // Highlight individual selected data point
+                    const isPointSelected = xySelectedDataPoint && xySelectedDataPoint.seriesIndex === si && xySelectedDataPoint.dataIndex === di;
+                    if (isPointSelected) {
+                        dot.setAttribute('stroke', isLight ? '#e91e63' : '#f38ba8');
+                        dot.setAttribute('stroke-width', '3');
+                        dot.setAttribute('r', '7');
+                    }
                     dot.style.cursor = 'pointer';
-                    dot.addEventListener('click', (e) => { e.stopPropagation(); selectXYSeries(si); });
-                    dot.addEventListener('dblclick', (e) => { e.stopPropagation(); editXYChartSeries(si); });
-                    dot.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); showXYChartContextMenu(e, si); });
+                    dot.addEventListener('click', (e) => { e.stopPropagation(); selectXYDataPoint(si, di); });
+                    dot.addEventListener('dblclick', (e) => { e.stopPropagation(); editXYDataPoint(si, di); });
+                    dot.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); showXYChartContextMenu(e, si, di); });
                     svg.appendChild(dot);
                 });
             }
@@ -458,9 +474,124 @@ function _xyRenderToolbar(svg, x, y, width, isLight, textColor) {
 
 function selectXYSeries(index) {
     xySelectedSeries = index;
+    xySelectedDataPoint = null;
     renderXYChart();
     _xyUpdateToolbarSelection();
     postMessage({ type: 'xy_seriesSelected', index });
+}
+
+function selectXYDataPoint(seriesIndex, dataIndex) {
+    xySelectedSeries = seriesIndex;
+    xySelectedDataPoint = { seriesIndex, dataIndex };
+    renderXYChart();
+    _xyUpdateToolbarSelection();
+    postMessage({ type: 'xy_dataPointSelected', seriesIndex, dataIndex });
+}
+
+function editXYDataPoint(seriesIndex, dataIndex) {
+    if (!xyModel || !xyModel.dataSeries || seriesIndex >= xyModel.dataSeries.length) return;
+    var s = xyModel.dataSeries[seriesIndex];
+    if (!s.data || dataIndex >= s.data.length) return;
+    var currentVal = s.data[dataIndex];
+    var catLabel = (xyModel.xAxisCategories && xyModel.xAxisCategories[dataIndex]) ? xyModel.xAxisCategories[dataIndex] : ('Point ' + (dataIndex + 1));
+
+    var propertyPanel = document.getElementById('property-panel');
+    var propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Edit Data Point';
+    var body = document.querySelector('.property-panel-body');
+
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Series</div>
+            <div class="property-label" style="font-weight:normal;opacity:0.7">${_escHtml(s.type)} #${seriesIndex + 1}</div>
+        </div>
+        <div class="property-row">
+            <div class="property-label">Category</div>
+            <div class="property-label" style="font-weight:normal;opacity:0.7">${_escHtml(catLabel)}</div>
+        </div>
+        <div class="property-row">
+            <div class="property-label">Value</div>
+            <input class="property-input" id="xy-dp-value" type="number" step="any" value="${currentVal}" />
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="xy-dp-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
+        </div>
+    `;
+    document.getElementById('xy-dp-ok').addEventListener('click', function() {
+        var val = parseFloat(document.getElementById('xy-dp-value').value);
+        if (isNaN(val)) return;
+        postMessage({ type: 'xy_dataPointEdited', seriesIndex: seriesIndex, dataIndex: dataIndex, value: val });
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
+    setTimeout(function() { document.getElementById('xy-dp-value').select(); }, 50);
+}
+
+function deleteXYDataPoint(seriesIndex, dataIndex) {
+    if (!xyModel || !xyModel.dataSeries || seriesIndex >= xyModel.dataSeries.length) return;
+    var s = xyModel.dataSeries[seriesIndex];
+    if (!s.data || dataIndex >= s.data.length) return;
+    var currentVal = s.data[dataIndex];
+    var catLabel = (xyModel.xAxisCategories && xyModel.xAxisCategories[dataIndex]) ? xyModel.xAxisCategories[dataIndex] : ('Point ' + (dataIndex + 1));
+
+    var propertyPanel = document.getElementById('property-panel');
+    var propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Delete Data Point';
+    var body = document.querySelector('.property-panel-body');
+    body.innerHTML = `
+        <div class="property-row"><div class="property-label" style="width:100%;text-align:center">Delete value ${_escHtml(String(currentVal))} at ${_escHtml(catLabel)}?</div></div>
+        <div class="property-row" style="display:flex;gap:8px;margin-top:8px">
+            <button id="xy-dp-yes" style="flex:1;padding:6px;cursor:pointer;background:#f44336;color:#fff;border:none;border-radius:4px">Delete</button>
+            <button id="xy-dp-no" style="flex:1;padding:6px;cursor:pointer;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">Cancel</button>
+        </div>
+    `;
+    document.getElementById('xy-dp-yes').addEventListener('click', function() {
+        postMessage({ type: 'xy_dataPointDeleted', seriesIndex: seriesIndex, dataIndex: dataIndex });
+        xySelectedDataPoint = null;
+        _xyUpdateToolbarSelection();
+        propertyPanel.classList.remove('visible');
+    });
+    document.getElementById('xy-dp-no').addEventListener('click', function() {
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
+}
+
+function insertXYDataPoint(seriesIndex, dataIndex) {
+    if (!xyModel || !xyModel.dataSeries || seriesIndex >= xyModel.dataSeries.length) return;
+
+    var propertyPanel = document.getElementById('property-panel');
+    var propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Insert Data Point';
+    var body = document.querySelector('.property-panel-body');
+
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Series</div>
+            <div class="property-label" style="font-weight:normal;opacity:0.7">${_escHtml(xyModel.dataSeries[seriesIndex].type)} #${seriesIndex + 1}</div>
+        </div>
+        <div class="property-row">
+            <div class="property-label">Position</div>
+            <div class="property-label" style="font-weight:normal;opacity:0.7">${dataIndex !== undefined ? 'At index ' + dataIndex : 'At end'}</div>
+        </div>
+        <div class="property-row">
+            <div class="property-label">Value</div>
+            <input class="property-input" id="xy-dp-value" type="number" step="any" value="0" />
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="xy-dp-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Insert</button>
+        </div>
+    `;
+    document.getElementById('xy-dp-ok').addEventListener('click', function() {
+        var val = parseFloat(document.getElementById('xy-dp-value').value);
+        if (isNaN(val)) return;
+        var msg = { type: 'xy_dataPointCreated', seriesIndex: seriesIndex, value: val };
+        if (dataIndex !== undefined) msg.dataIndex = dataIndex;
+        postMessage(msg);
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
+    setTimeout(function() { document.getElementById('xy-dp-value').select(); }, 50);
 }
 
 function _xyUpdateToolbarSelection() {
@@ -709,7 +840,7 @@ function _xyAddCtxSeparator(menu) {
     menu.appendChild(sep);
 }
 
-function showXYChartContextMenu(e, seriesIndex) {
+function showXYChartContextMenu(e, seriesIndex, dataIndex) {
     // Remove existing menus
     document.querySelectorAll('.xy-ctx-menu').forEach(m => m.remove());
 
@@ -718,7 +849,21 @@ function showXYChartContextMenu(e, seriesIndex) {
     menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;background:var(--context-menu-bg);border:1px solid var(--context-menu-border);border-radius:6px;padding:4px 0;z-index:9999;min-width:160px;box-shadow:0 4px 12px rgba(0,0,0,0.3)`;
 
     if (seriesIndex !== undefined && seriesIndex !== null) {
-        selectXYSeries(seriesIndex);
+        // Data point-level context menu items
+        if (dataIndex !== undefined && dataIndex !== null) {
+            selectXYDataPoint(seriesIndex, dataIndex);
+            var s = xyModel.dataSeries[seriesIndex];
+            var catLabel = (xyModel.xAxisCategories && xyModel.xAxisCategories[dataIndex]) ? xyModel.xAxisCategories[dataIndex] : ('Point ' + (dataIndex + 1));
+            _xyAddCtxItem(menu, 'Edit Value (' + catLabel + ')', () => editXYDataPoint(seriesIndex, dataIndex));
+            _xyAddCtxItem(menu, 'Delete Value', () => deleteXYDataPoint(seriesIndex, dataIndex));
+            _xyAddCtxSeparator(menu);
+            _xyAddCtxItem(menu, 'Insert Value Before', () => insertXYDataPoint(seriesIndex, dataIndex));
+            _xyAddCtxItem(menu, 'Insert Value After', () => insertXYDataPoint(seriesIndex, dataIndex + 1));
+            _xyAddCtxItem(menu, 'Append Value', () => insertXYDataPoint(seriesIndex, undefined));
+            _xyAddCtxSeparator(menu);
+        } else {
+            selectXYSeries(seriesIndex);
+        }
 
         _xyAddCtxItem(menu, 'Edit Series', () => editXYChartSeries(seriesIndex));
         _xyAddCtxItem(menu, 'Delete Series', () => deleteXYChartSeries(seriesIndex));

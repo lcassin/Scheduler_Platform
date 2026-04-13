@@ -181,6 +181,61 @@ public partial class VisualEditorBridge
         RaiseXYChartModelChanged("xy_seriesMoved");
     }
 
+    // ========== XY Chart Data Point Handlers ==========
+
+    private void HandleXYChartDataPointEdited(JsonElement root)
+    {
+        if (_xyChartModel == null) return;
+        var seriesIndex = root.GetProperty("seriesIndex").GetInt32();
+        var dataIndex = root.GetProperty("dataIndex").GetInt32();
+        var value = root.GetProperty("value").GetDouble();
+        if (seriesIndex < 0 || seriesIndex >= _xyChartModel.DataSeries.Count) return;
+        var series = _xyChartModel.DataSeries[seriesIndex];
+        if (dataIndex < 0 || dataIndex >= series.Data.Count) return;
+
+        PushUndo();
+        series.Data[dataIndex] = value;
+        RaiseXYChartModelChanged("xy_dataPointEdited");
+    }
+
+    private void HandleXYChartDataPointDeleted(JsonElement root)
+    {
+        if (_xyChartModel == null) return;
+        var seriesIndex = root.GetProperty("seriesIndex").GetInt32();
+        var dataIndex = root.GetProperty("dataIndex").GetInt32();
+        if (seriesIndex < 0 || seriesIndex >= _xyChartModel.DataSeries.Count) return;
+        var series = _xyChartModel.DataSeries[seriesIndex];
+        if (dataIndex < 0 || dataIndex >= series.Data.Count) return;
+
+        PushUndo();
+        series.Data.RemoveAt(dataIndex);
+        RaiseXYChartModelChanged("xy_dataPointDeleted");
+    }
+
+    private void HandleXYChartDataPointCreated(JsonElement root)
+    {
+        if (_xyChartModel == null) return;
+        var seriesIndex = root.GetProperty("seriesIndex").GetInt32();
+        var value = root.GetProperty("value").GetDouble();
+        if (seriesIndex < 0 || seriesIndex >= _xyChartModel.DataSeries.Count) return;
+        var series = _xyChartModel.DataSeries[seriesIndex];
+
+        PushUndo();
+        if (root.TryGetProperty("dataIndex", out var diProp))
+        {
+            var dataIndex = diProp.GetInt32();
+            if (dataIndex >= 0 && dataIndex <= series.Data.Count)
+                series.Data.Insert(dataIndex, value);
+            else
+                series.Data.Add(value);
+        }
+        else
+        {
+            series.Data.Add(value);
+        }
+        RaiseXYChartModelChanged("xy_dataPointCreated");
+    }
+
     private void HandleXYChartSettingsChanged(JsonElement root)
     {
         if (_xyChartModel == null) return;

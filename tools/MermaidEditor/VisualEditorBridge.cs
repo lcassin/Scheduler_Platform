@@ -1120,6 +1120,19 @@ public partial class VisualEditorBridge
                     break;
 
                 case "xy_seriesSelected":
+                case "xy_dataPointSelected":
+                    break;
+
+                case "xy_dataPointEdited":
+                    HandleXYChartDataPointEdited(root);
+                    break;
+
+                case "xy_dataPointDeleted":
+                    HandleXYChartDataPointDeleted(root);
+                    break;
+
+                case "xy_dataPointCreated":
+                    HandleXYChartDataPointCreated(root);
                     break;
             }
         }
