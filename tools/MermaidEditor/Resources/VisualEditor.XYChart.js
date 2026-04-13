@@ -545,8 +545,8 @@ function editXYDataPoint(seriesIndex, dataIndex) {
     if (isLine) {
         noValueHtml = `
         <div class="property-row">
-            <label style="display:flex;align-items:center;gap:8px;cursor:${isFirstOrLast ? 'not-allowed' : 'pointer'};opacity:${isFirstOrLast ? '0.4' : '1'}">
-                <input type="checkbox" id="xy-dp-novalue" ${isNoValue ? 'checked' : ''} ${isFirstOrLast ? 'disabled' : ''} style="accent-color:var(--node-selected-stroke);width:16px;height:16px" />
+            <label id="xy-dp-novalue-label" style="display:flex;align-items:center;gap:8px;cursor:${isFirstOrLast ? 'not-allowed' : 'pointer'};opacity:${isFirstOrLast ? '0.4' : '1'}">
+                <span id="xy-dp-novalue" data-checked="${isNoValue}" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:2px solid var(--node-stroke);border-radius:3px;background:${isNoValue ? 'var(--node-selected-stroke)' : 'transparent'};flex-shrink:0;transition:background .15s,border-color .15s;${isFirstOrLast ? 'pointer-events:none' : ''}">${isNoValue ? '<svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="#fff" stroke-width="2" fill="none"/></svg>' : ''}</span>
                 <span>No Value (interpolate)</span>
             </label>
             ${isFirstOrLast ? '<div style="font-size:11px;opacity:0.5;margin-top:2px">First and last points must have values</div>' : ''}
@@ -572,13 +572,20 @@ function editXYDataPoint(seriesIndex, dataIndex) {
         </div>
     `;
 
-    // Wire up No Value checkbox toggle
+    // Wire up custom No Value checkbox toggle
     var noValueCheckbox = document.getElementById('xy-dp-novalue');
-    if (noValueCheckbox) {
-        noValueCheckbox.addEventListener('change', function() {
+    if (noValueCheckbox && !isFirstOrLast) {
+        document.getElementById('xy-dp-novalue-label').addEventListener('click', function(e) {
+            e.preventDefault();
+            var cb = document.getElementById('xy-dp-novalue');
+            var isChecked = cb.getAttribute('data-checked') === 'true';
+            var nowChecked = !isChecked;
+            cb.setAttribute('data-checked', nowChecked);
+            cb.style.background = nowChecked ? 'var(--node-selected-stroke)' : 'transparent';
+            cb.innerHTML = nowChecked ? '<svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="#fff" stroke-width="2" fill="none"/></svg>' : '';
             var valueInput = document.getElementById('xy-dp-value');
             var valueRow = document.getElementById('xy-dp-value-row');
-            if (this.checked) {
+            if (nowChecked) {
                 valueInput.disabled = true;
                 valueRow.style.opacity = '0.4';
                 valueRow.style.pointerEvents = 'none';
@@ -591,7 +598,7 @@ function editXYDataPoint(seriesIndex, dataIndex) {
     }
 
     document.getElementById('xy-dp-ok').addEventListener('click', function() {
-        var noValueChecked = noValueCheckbox ? noValueCheckbox.checked : false;
+        var noValueChecked = noValueCheckbox ? noValueCheckbox.getAttribute('data-checked') === 'true' : false;
         if (noValueChecked) {
             // Toggle to NoValue
             postMessage({ type: 'xy_dataPointNoValueToggled', seriesIndex: seriesIndex, dataIndex: dataIndex, noValue: true });
