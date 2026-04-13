@@ -814,8 +814,12 @@ function editGitGraphCommand(index) {
     const cmd = gitGraphModel.commands[index];
     if (!cmd) return;
 
-    // Only show branches declared before the current command position
+    // Only show branches declared before the current command position,
+    // but always include the command's current branch so it stays pre-selected
     const branches = _ggGetExistingBranches(index);
+    if (cmd.branchName && !branches.includes(cmd.branchName)) {
+        branches.push(cmd.branchName);
+    }
     const propertyPanel = document.getElementById('property-panel');
     const propPanelTitle = document.getElementById('property-panel-title');
     propPanelTitle.textContent = `Edit ${cmd.type}`;
