@@ -1048,7 +1048,7 @@
             <svg viewBox="0 0 16 16"><path d="M5,3 V2 h6 v1 h3 v1.5 H2 V3 h3z M3,5.5 h10 l-0.8,9 H3.8 L3,5.5z M6.5,7 v5.5 M9.5,7 v5.5" fill="none" stroke-width="1.2"/></svg>
             <span class="tooltip">Delete Slice</span>
         </button>
-        <div class="toolbar-sep"></div>
+        <div class="toolbar-sep" id="tb-delete-sep"></div>
         <button class="toolbar-btn" id="tb-delete" title="Delete Selected (Del)">
             <svg viewBox="0 0 16 16"><path d="M5,3 V2 h6 v1 h3 v1.5 H2 V3 h3z M3,5.5 h10 l-0.8,9 H3.8 L3,5.5z M6.5,7 v5.5 M9.5,7 v5.5" fill="none" stroke-width="1.2"/></svg>
             <span class="tooltip">Delete (Del)</span>
@@ -1109,11 +1109,14 @@
                     btn.style.display = (cls === activeClass) ? '' : 'none';
                 });
             });
-            // Hide the generic delete button for diagram types that have their own delete button
+            // Hide the generic delete button (and its preceding separator) for diagram types that have their own delete button
             const genericDelete = document.getElementById('tb-delete');
+            const genericDeleteSep = document.getElementById('tb-delete-sep');
             if (genericDelete) {
                 const typesWithOwnDelete = ['mindmap', 'pie', 'timeline', 'journey', 'quadrant', 'gitGraph'];
-                genericDelete.style.display = typesWithOwnDelete.includes(currentDiagramType) ? 'none' : '';
+                const hide = typesWithOwnDelete.includes(currentDiagramType);
+                genericDelete.style.display = hide ? 'none' : '';
+                if (genericDeleteSep) genericDeleteSep.style.display = hide ? 'none' : '';
             }
         }
 

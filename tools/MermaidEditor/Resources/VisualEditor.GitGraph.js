@@ -1070,12 +1070,16 @@ function showGitGraphContextMenu(e) {
 
     document.body.appendChild(menu);
 
-    // Close on click outside
+    // Close on click/right-click outside
     const closeMenu = (ev) => {
         if (!menu.contains(ev.target)) {
             menu.remove();
-            document.removeEventListener('click', closeMenu);
+            document.removeEventListener('mousedown', closeMenu);
+            document.removeEventListener('contextmenu', closeMenu);
         }
     };
-    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    setTimeout(() => {
+        document.addEventListener('mousedown', closeMenu);
+        document.addEventListener('contextmenu', closeMenu);
+    }, 0);
 }
