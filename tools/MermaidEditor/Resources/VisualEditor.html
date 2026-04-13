@@ -1157,9 +1157,7 @@
 
         // Unified toolbar visibility based on current diagram type
         function updateToolbarForDiagramType() {
-            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er', 'toolbar-gantt', 'toolbar-mindmap', 'toolbar-pie', 'toolbar-timeline', 'toolbar-journey', 'toolbar-quadrant', 'toolbar-gitGraph', 'toolbar-zenuml'];
-            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er', 'toolbar-gantt', 'toolbar-mindmap', 'toolbar-pie', 'toolbar-timeline', 'toolbar-journey', 'toolbar-quadrant', 'toolbar-gitGraph'];
-            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er', 'toolbar-gantt', 'toolbar-mindmap', 'toolbar-pie', 'toolbar-timeline', 'toolbar-journey', 'toolbar-quadrant', 'toolbar-gitGraph', 'toolbar-xyChart'];
+            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er', 'toolbar-gantt', 'toolbar-mindmap', 'toolbar-pie', 'toolbar-timeline', 'toolbar-journey', 'toolbar-quadrant', 'toolbar-gitGraph', 'toolbar-xyChart', 'toolbar-zenuml'];
             const activeClass = 'toolbar-' + currentDiagramType;
             typeClasses.forEach(cls => {
                 document.querySelectorAll('.' + cls).forEach(btn => {
@@ -1170,9 +1168,7 @@
             const genericDelete = document.getElementById('tb-delete');
             const genericDeleteSep = document.getElementById('tb-delete-sep');
             if (genericDelete) {
-                const typesWithOwnDelete = ['mindmap', 'pie', 'timeline', 'journey', 'quadrant', 'gitGraph', 'zenuml'];
-                const typesWithOwnDelete = ['mindmap', 'pie', 'timeline', 'journey', 'quadrant', 'gitGraph'];
-                const typesWithOwnDelete = ['mindmap', 'pie', 'timeline', 'journey', 'quadrant', 'gitGraph', 'xyChart'];
+                const typesWithOwnDelete = ['mindmap', 'pie', 'timeline', 'journey', 'quadrant', 'gitGraph', 'xyChart', 'zenuml'];
                 const hide = typesWithOwnDelete.includes(currentDiagramType);
                 genericDelete.style.display = hide ? 'none' : '';
                 if (genericDeleteSep) genericDeleteSep.style.display = hide ? 'none' : '';
