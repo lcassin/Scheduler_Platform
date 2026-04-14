@@ -213,6 +213,7 @@ Console.WriteLine(""Hello, World!"");
         Closing += MainWindow_Closing;
         SourceInitialized += MainWindow_SourceInitialized;
         StateChanged += MainWindow_StateChanged;
+        SizeChanged += MainWindow_SizeChanged;
 
         SetupCodeEditor();
         
@@ -727,8 +728,8 @@ Console.WriteLine(""Hello, World!"");
 
     /// <summary>
     /// Re-render the preview when the window is maximized/restored so that
-    /// diagram types that lay out based on container width (ZenUML, architecture)
-    /// pick up the new viewport size.
+    /// diagram types that lay out based on container width (ZenUML, Gantt,
+    /// architecture) pick up the new viewport size.
     /// </summary>
     private void MainWindow_StateChanged(object? sender, EventArgs e)
     {
@@ -737,6 +738,21 @@ Console.WriteLine(""Hello, World!"");
         {
             // Debounce via the existing render timer so we don't re-render twice
             // if a text change also happens at the same time.
+            _renderTimer.Stop();
+            _renderTimer.Start();
+        }
+    }
+
+    /// <summary>
+    /// Re-render the preview when the window is resized (e.g. dragging edges)
+    /// so responsive diagram types adapt to the new container width, matching
+    /// the behaviour of mermaid.live.  Debounced via _renderTimer.
+    /// </summary>
+    private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!_webViewInitialized) return;
+        if (_currentRenderMode == RenderMode.Mermaid)
+        {
             _renderTimer.Stop();
             _renderTimer.Start();
         }
@@ -1929,12 +1945,14 @@ Console.WriteLine(""Hello, World!"");
             var isArch = /^\s*architecture/m.test(newCode);
             var isGantt = /^\s*gantt/m.test(newCode);
             var isZenUML = /^\s*zenuml/m.test(newCode);
-            // All diagram types get a LARGE container so they render at full size.
-            // Panzoom handles navigation for content wider than the viewport.
-            // Architecture uses viewport width since it genuinely adapts to container.
-            var usesContainerWidth = isArch;
+            // Responsive types (ZenUML, Gantt, Architecture) render at the current
+            // viewport width — just like mermaid.live does.  When the window is
+            // resized the C# SizeChanged handler triggers a debounced re-render so
+            // the diagram adapts to the new width automatically.
+            // Other diagram types keep a large fixed width so panzoom handles
+            // navigation for content wider than the viewport.
+            var usesContainerWidth = isArch || isGantt || isZenUML;
             var minW = usesContainerWidth ? ((window.innerWidth - 60) + 'px')
-                     : (isGantt || isZenUML) ? (Math.max(window.innerWidth - 60, 2000) + 'px')
                      : '2000px';
             diagram.style.minWidth = minW;
             diagram.style.width = '';
@@ -1996,16 +2014,16 @@ Console.WriteLine(""Hello, World!"");
                             if (svgWidth > 0 && svgHeight > 0) {{
                                 // Override Mermaid's inline styles that conflict with our sizing.
                                 // We run AFTER Mermaid, so our inline styles win.
-                                svg.style.maxWidth = 'none';
                                 
-                                                    if (usesContainerWidth || isGantt || isZenUML) {{
-                                                        // Architecture/ZenUML/Gantt lay out based on container width.
-                                                        // Keep the container minWidth so the layout isn't collapsed.
-                                                        // Only set height from getBBox; width stays as rendered.
-                                                        svg.style.height = svgHeight + 'px';
-                                                        svg.style.minHeight = svgHeight + 'px';
+                                if (usesContainerWidth) {{
+                                    // Responsive types: keep Mermaid's max-width:100%
+                                    // so the SVG scales to fit the container (like mermaid.live).
+                                    // Only set height from getBBox; width stays responsive.
+                                    svg.style.height = svgHeight + 'px';
+                                    svg.style.minHeight = svgHeight + 'px';
                                 }} else {{
-                                    // Force SVG to content size (overrides Mermaid's inline styles).
+                                    // Fixed-width types: remove maxWidth cap and force to content size.
+                                    svg.style.maxWidth = 'none';
                                     svg.style.width = svgWidth + 'px';
                                     svg.style.height = svgHeight + 'px';
                                     svg.style.minWidth = svgWidth + 'px';
@@ -2080,8 +2098,9 @@ Console.WriteLine(""Hello, World!"");
                             }}
                             
                             // ZenUML (and other DOM-based diagrams) adapt to container width.
-                            // The container was given a large minWidth (2000px+) before rendering
-                            // so the diagram has room to lay out fully. Keep it as-is.
+                            // The container was set to viewport width before rendering so the
+                            // diagram lays out at the current window size.  The C# SizeChanged
+                            // handler re-renders when the window is resized.
                             
                             // Set up panzoom for non-SVG content
                             window.panzoomInstance = panzoom(diagram, {{
