@@ -2663,6 +2663,17 @@
                         hasContent = true;
                     }
                 });
+            } else if (currentDiagramType === 'zenuml' && zuDiagram) {
+                const pCount = zuDiagram.participants.length;
+                if (pCount > 0) {
+                    const firstX = zuGetParticipantX(0);
+                    const lastX = zuGetParticipantX(pCount - 1);
+                    minX = firstX - ZU_PARTICIPANT_WIDTH / 2 - 20;
+                    maxX = lastX + ZU_PARTICIPANT_WIDTH / 2 + 20;
+                    minY = 0;
+                    maxY = zuGetTotalVisualHeight();
+                    hasContent = true;
+                }
             } else if (_isEditorCanvasDiagram()) {
                 // For gantt/mindmap/pie: derive bounding box from the SVG inside editorCanvas
                 const ecSvg = _getEditorCanvasSvg();
@@ -4640,6 +4651,70 @@
                         currentY += 15;
                     }
                 });
+            } else if (currentDiagramType === 'zenuml' && zuDiagram) {
+                // Draw participant boxes
+                zuDiagram.participants.forEach((p, idx) => {
+                    const px = (zuGetParticipantX(idx) - ZU_PARTICIPANT_WIDTH / 2 - minX) * scale;
+                    const py = (ZU_TOP_MARGIN - ZU_PARTICIPANT_HEIGHT / 2 - minY) * scale;
+                    const pw = ZU_PARTICIPANT_WIDTH * scale;
+                    const ph = ZU_PARTICIPANT_HEIGHT * scale;
+                    const isSelected = (zuSelectedParticipantIdx === idx);
+                    minimapCtx.fillStyle = isSelected ? (isDark ? '#007ACC' : '#0078D4') : (isDark ? '#3E3E42' : '#CCCCCC');
+                    minimapCtx.fillRect(px, py, pw, ph);
+                });
+
+                // Draw lifelines
+                minimapCtx.strokeStyle = isDark ? '#555' : '#bbb';
+                minimapCtx.lineWidth = 0.5;
+                const zuTotalH = zuGetTotalVisualHeight();
+                zuDiagram.participants.forEach((p, idx) => {
+                    const lx = (zuGetParticipantX(idx) - minX) * scale;
+                    const ly1 = (ZU_LIFELINE_START_Y - minY) * scale;
+                    const ly2 = (zuTotalH - minY) * scale;
+                    minimapCtx.beginPath();
+                    minimapCtx.moveTo(lx, ly1);
+                    minimapCtx.lineTo(lx, ly2);
+                    minimapCtx.stroke();
+                });
+
+                // Draw messages as horizontal lines
+                minimapCtx.strokeStyle = isDark ? '#888' : '#666';
+                minimapCtx.lineWidth = 1;
+                const zuTree = zuBuildElementTree(zuDiagram.elements);
+                let zuCurrentY = ZU_LIFELINE_START_Y + 30;
+                function zuDrawMinimapTree(items) {
+                    items.forEach(item => {
+                        if (item.elementType === 'message') {
+                            const fromIdx = zuGetParticipantIndex(item.fromId);
+                            const toIdx = zuGetParticipantIndex(item.toId);
+                            if (fromIdx >= 0 && toIdx >= 0) {
+                                const x1 = (zuGetParticipantX(fromIdx) - minX) * scale;
+                                const x2 = (zuGetParticipantX(toIdx) - minX) * scale;
+                                const y = (zuCurrentY - minY) * scale;
+                                minimapCtx.beginPath();
+                                minimapCtx.moveTo(x1, y);
+                                minimapCtx.lineTo(x2, y);
+                                minimapCtx.stroke();
+                            }
+                            zuCurrentY += ZU_MESSAGE_SPACING;
+                            if (item.children && item.children.length > 0) {
+                                zuDrawMinimapTree(item.children);
+                                zuCurrentY += 15;
+                            }
+                        } else if (item.elementType === 'return') {
+                            zuCurrentY += 35;
+                        } else if (item.elementType === 'fragment') {
+                            zuCurrentY += 25;
+                            if (item.children && item.children.length > 0) {
+                                zuDrawMinimapTree(item.children);
+                            }
+                            zuCurrentY += 15;
+                        } else if (item.elementType === 'comment') {
+                            zuCurrentY += 30;
+                        }
+                    });
+                }
+                zuDrawMinimapTree(zuTree);
             } else if (currentDiagramType === 'class' && clsDiagram) {
                 // Draw class boxes
                 clsDiagram.classes.forEach(cls => {
