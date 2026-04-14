@@ -2017,12 +2017,11 @@ Console.WriteLine(""Hello, World!"");
                                 // We run AFTER Mermaid, so our inline styles win.
                                 
                                 if (usesContainerWidth) {{
-                                    // Responsive types: if the diagram's intrinsic width
-                                    // exceeds the viewport, expand the container so the
-                                    // diagram is never clipped.  Remove max-width cap and
-                                    // force to content size so panzoom can navigate.
+                                    // Responsive types: always remove Mermaid's max-width cap.
+                                    // If the diagram's intrinsic width exceeds the viewport,
+                                    // expand the container so the diagram is never clipped.
+                                    svg.style.maxWidth = 'none';
                                     if (svgWidth > viewportW) {{
-                                        svg.style.maxWidth = 'none';
                                         svg.style.width = svgWidth + 'px';
                                         svg.style.minWidth = svgWidth + 'px';
                                         diagram.style.minWidth = svgWidth + 'px';
