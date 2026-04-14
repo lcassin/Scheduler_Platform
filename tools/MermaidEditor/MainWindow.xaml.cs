@@ -212,6 +212,7 @@ Console.WriteLine(""Hello, World!"");
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
         SourceInitialized += MainWindow_SourceInitialized;
+        StateChanged += MainWindow_StateChanged;
 
         SetupCodeEditor();
         
@@ -722,6 +723,23 @@ Console.WriteLine(""Hello, World!"");
             .Where(k => k.keyword.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             .Select(k => new MermaidCompletionData(k.keyword, k.description))
             .ToList();
+    }
+
+    /// <summary>
+    /// Re-render the preview when the window is maximized/restored so that
+    /// diagram types that lay out based on container width (ZenUML, architecture)
+    /// pick up the new viewport size.
+    /// </summary>
+    private void MainWindow_StateChanged(object? sender, EventArgs e)
+    {
+        if (!_webViewInitialized) return;
+        if (_currentRenderMode == RenderMode.Mermaid)
+        {
+            // Debounce via the existing render timer so we don't re-render twice
+            // if a text change also happens at the same time.
+            _renderTimer.Stop();
+            _renderTimer.Start();
+        }
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
