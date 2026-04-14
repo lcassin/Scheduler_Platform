@@ -1945,15 +1945,18 @@ Console.WriteLine(""Hello, World!"");
             var isArch = /^\s*architecture/m.test(newCode);
             var isGantt = /^\s*gantt/m.test(newCode);
             var isZenUML = /^\s*zenuml/m.test(newCode);
-            // Responsive types (ZenUML, Gantt, Architecture) render at the current
-            // viewport width initially.  After rendering, if the content's natural
-            // width exceeds the viewport we expand the container to fit so the
-            // diagram is never clipped.  Panzoom handles navigation for content
-            // wider than the viewport.  The C# SizeChanged handler triggers a
-            // debounced re-render when the window is resized.
-            var usesContainerWidth = isArch || isGantt || isZenUML;
+            // Responsive types (Gantt, Architecture) render at the current
+            // viewport width and re-render when the window is resized via
+            // the C# SizeChanged handler.
+            // ZenUML renders to DOM that conforms to its container width,
+            // so we give it a large container (4000px) to lay out all
+            // participants naturally, then shrink to fit after measuring.
+            // Other diagram types keep a large fixed width so panzoom
+            // handles navigation.
+            var usesContainerWidth = isArch || isGantt;
             var viewportW = window.innerWidth - 60;
             var minW = usesContainerWidth ? (viewportW + 'px')
+                     : isZenUML ? '4000px'
                      : '2000px';
             diagram.style.minWidth = minW;
             diagram.style.width = '';
@@ -2104,12 +2107,14 @@ Console.WriteLine(""Hello, World!"");
                                 return;
                             }}
                             
-                            // ZenUML (and other DOM-based diagrams) adapt to container width.
-                            // After rendering, if the content is wider than the viewport,
-                            // expand the container so the diagram is never clipped.
+                            // ZenUML renders DOM that conforms to its container.
+                            // We gave it a large container (4000px) so all participants
+                            // laid out naturally.  Now shrink the container to the
+                            // actual content width so panzoom works correctly.
                             var contentW = contentEl.scrollWidth || contentEl.offsetWidth;
-                            if (contentW > viewportW) {{
+                            if (contentW > 0) {{
                                 diagram.style.minWidth = contentW + 'px';
+                                diagram.style.width = contentW + 'px';
                             }}
                             
                             // Set up panzoom for non-SVG content
