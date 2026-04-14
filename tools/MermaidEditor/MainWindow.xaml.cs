@@ -1786,6 +1786,10 @@ Console.WriteLine(""Hello, World!"");
                     currentZoom = scale;
                     window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom, renderGen: window._renderGen }});
                     
+                    // Reset scroll position so the fitted diagram is visible at the origin
+                    container.scrollLeft = 0;
+                    container.scrollTop = 0;
+                    
                     // Reveal diagram (it may have been hidden to prevent flash during re-render)
                     diagram.style.opacity = '1';
                 }}, 10);
@@ -1921,17 +1925,16 @@ Console.WriteLine(""Hello, World!"");
             // Clear existing content and add new mermaid code
             diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
             diagram.classList.remove('has-error');
-            // Detect diagram types that adapt to container width.
+            // Detect diagram types that need special container sizing.
             var isArch = /^\s*architecture/m.test(newCode);
             var isGantt = /^\s*gantt/m.test(newCode);
             var isZenUML = /^\s*zenuml/m.test(newCode);
-            // Architecture and ZenUML use viewport-width containers so they lay out nicely.
-            // Gantt needs a LARGE container so it doesn't scrunch dates/bars — it grows
-            // horizontally with task count and date range, so give it plenty of room.
+            // All diagram types get a LARGE container so they render at full size.
             // Panzoom handles navigation for content wider than the viewport.
-            var usesContainerWidth = isArch || isZenUML;
+            // Architecture uses viewport width since it genuinely adapts to container.
+            var usesContainerWidth = isArch;
             var minW = usesContainerWidth ? ((window.innerWidth - 60) + 'px')
-                     : isGantt ? (Math.max(window.innerWidth - 60, 2000) + 'px')
+                     : (isGantt || isZenUML) ? (Math.max(window.innerWidth - 60, 2000) + 'px')
                      : '2000px';
             diagram.style.minWidth = minW;
             diagram.style.width = '';
@@ -1995,12 +1998,12 @@ Console.WriteLine(""Hello, World!"");
                                 // We run AFTER Mermaid, so our inline styles win.
                                 svg.style.maxWidth = 'none';
                                 
-                                    if (usesContainerWidth || isGantt) {{
-                                        // Architecture/ZenUML/Gantt lay out based on container width.
-                                        // Keep the container minWidth so the layout isn't collapsed.
-                                        // Only set height from getBBox; width stays as rendered.
-                                        svg.style.height = svgHeight + 'px';
-                                        svg.style.minHeight = svgHeight + 'px';
+                                                    if (usesContainerWidth || isGantt || isZenUML) {{
+                                                        // Architecture/ZenUML/Gantt lay out based on container width.
+                                                        // Keep the container minWidth so the layout isn't collapsed.
+                                                        // Only set height from getBBox; width stays as rendered.
+                                                        svg.style.height = svgHeight + 'px';
+                                                        svg.style.minHeight = svgHeight + 'px';
                                 }} else {{
                                     // Force SVG to content size (overrides Mermaid's inline styles).
                                     svg.style.width = svgWidth + 'px';
@@ -2077,8 +2080,8 @@ Console.WriteLine(""Hello, World!"");
                             }}
                             
                             // ZenUML (and other DOM-based diagrams) adapt to container width.
-                            // Since we already set the container to viewport width before rendering,
-                            // just keep it as-is. No shrinking needed.
+                            // The container was given a large minWidth (2000px+) before rendering
+                            // so the diagram has room to lay out fully. Keep it as-is.
                             
                             // Set up panzoom for non-SVG content
                             window.panzoomInstance = panzoom(diagram, {{
