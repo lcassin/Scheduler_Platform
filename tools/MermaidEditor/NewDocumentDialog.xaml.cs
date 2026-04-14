@@ -395,14 +395,26 @@ Bio-conversion,Gas,81.144",
     server:R -- L:disk",
             "ZenUML" => @"zenuml
     title Order Service
-    @Actor Client
-    @Boundary OrderController
-    @Entity OrderService
+    @Actor Client #FFEBE6
+    @Boundary OrderController #0747A6
+    @EC2 <<BFF>> OrderService #E3FCEF
+    group BusinessService {
+      @Lambda PurchaseService
+      @AzureFunction InvoiceService
+    }
 
-    Client->OrderController.placeOrder() {
-        OrderController->OrderService.create() {
-            return id
+    @Starter(Client)
+    // `POST /orders`
+    OrderController.post(payload) {
+      OrderService.create(payload) {
+        order = new Order(payload)
+        if(order != null) {
+          par {
+            PurchaseService.createPO(order)
+            InvoiceService.createInvoice(order)
+          }
         }
+      }
     }",
             "Radar" => @"radar-beta
     title Skills Assessment
@@ -1415,20 +1427,31 @@ Thermal generation,District heating,46.184
         SetTemplateAndClose(@"zenuml
     title Order Processing Workflow
 
-    @Actor Customer
-    @Boundary WebApp
-    @Control OrderService
-    @Entity Database
-    @Entity PaymentGateway
+    @Actor Customer #FFEBE6
+    @Boundary WebApp #E6F4FF
+    @Control OrderService #E3FCEF
+    @Entity Database #FFF0B3
+    @Entity PaymentGateway #EAE6FF
 
-    // Customer places order
+    group BackendServices {
+      @Lambda NotificationService
+    }
+
+    @Starter(Customer)
+    // `Place a new order`
     Customer->WebApp.placeOrder(items) {
         WebApp->OrderService.createOrder(items) {
             OrderService->Database.saveOrder(order) {
                 return orderId
             }
-            OrderService->PaymentGateway.processPayment(amount) {
-                return paymentConfirmation
+            if(googlepay) {
+                OrderService->PaymentGateway.processPayment(amount) {
+                    return paymentConfirmation
+                }
+            }
+            par {
+                NotificationService.sendConfirmation(order)
+                Database.updateInventory(items)
             }
             return orderConfirmation
         }
@@ -1436,12 +1459,19 @@ Thermal generation,District heating,46.184
     }
 
     %% ZenUML Elements:
-    %% @Actor Name - Actor participant
+    %% @Actor Name #color - Actor participant with background color
     %% @Boundary Name - Boundary participant
     %% @Control Name - Control participant
     %% @Entity Name - Entity participant
+    %% @EC2 <<stereotype>> Name - Cloud service with stereotype label
+    %% @Lambda Name - Lambda function participant
+    %% @AzureFunction Name - Azure function participant
+    %% @Starter(Name) - Designate the initiating participant
+    %% group Name { ... } - Group related participants
     %% A->B.method() { } - Sync call with nested interactions
     %% A->B.method() - Simple sync call
+    %% if(cond) { } - Conditional block
+    %% par { } - Parallel execution block
     %% return value - Return from call");
     }
 
