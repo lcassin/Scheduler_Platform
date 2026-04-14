@@ -2230,7 +2230,7 @@ public static class MermaidSerializer
                     {
                         // Quote return values containing spaces so ZenUML treats them as a single token
                         var retVal = ret.Value.Contains(' ') && !ret.Value.StartsWith('"')
-                            ? $"\"{ret.Value}\""
+                            ? $"\"{ret.Value.Replace("\"", "\\\"")}\""
                             : ret.Value;
                         sb.AppendLine($"{indent}return {retVal}");
                     }
