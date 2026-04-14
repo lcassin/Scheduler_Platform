@@ -1517,7 +1517,7 @@ Console.WriteLine(""Hello, World!"");
         }}
     </script>
     <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
-    <script src=""https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs"" type=""module""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.2/dist/mermaid-zenuml.esm.min.mjs"" type=""module""></script>
     <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -1607,7 +1607,7 @@ Console.WriteLine(""Hello, World!"");
         // which correctly handles all diagram types including architecture and ZenUML.
         async function initPlugins() {{
             try {{
-                const zenuml = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs');
+                const zenuml = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.2/dist/mermaid-zenuml.esm.min.mjs');
                 await mermaid.registerExternalDiagrams([zenuml.default]);
             }} catch(e) {{ /* ZenUML plugin not available, continue without it */ }}
             mermaid.initialize({{ 
@@ -2304,7 +2304,7 @@ Console.WriteLine(""Hello, World!"");
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/json.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/sql.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
-    <script src=""https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs"" type=""module""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.2/dist/mermaid-zenuml.esm.min.mjs"" type=""module""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         html, body {{ 
@@ -2391,7 +2391,7 @@ Console.WriteLine(""Hello, World!"");
         // Initialize mermaid for rendering embedded diagrams in markdown
         async function initMermaid() {{
             try {{
-                const zenuml = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs');
+                const zenuml = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.2/dist/mermaid-zenuml.esm.min.mjs');
                 await mermaid.registerExternalDiagrams([zenuml.default]);
             }} catch(e) {{ /* ZenUML plugin not available, continue without it */ }}
             mermaid.initialize({{ 
@@ -8418,7 +8418,7 @@ Console.WriteLine(""Hello, World!"");
         }}
     </script>
     <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
-    <script src=""https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs"" type=""module""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.2/dist/mermaid-zenuml.esm.min.mjs"" type=""module""></script>
     <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -8464,7 +8464,7 @@ Console.WriteLine(""Hello, World!"");
     <script>
         async function initAndRunPreview() {{
             try {{
-                const zenuml = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs');
+                const zenuml = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.2/dist/mermaid-zenuml.esm.min.mjs');
                 await mermaid.registerExternalDiagrams([zenuml.default]);
             }} catch(e) {{ /* ZenUML plugin not available, continue without it */ }}
             mermaid.initialize({{ 
