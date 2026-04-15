@@ -1986,7 +1986,72 @@ Console.WriteLine(""Hello, World!"");
                     const svg = document.querySelector('#diagram svg');
                     
                     // Fix SVG and container dimensions after render
-                    if (svg) {{
+                    if (svg && isZenUML) {{
+                        // ZenUML renders DOM inside an SVG foreignObject.
+                        // The content renders asynchronously, so we poll until
+                        // the .inline-block canvas element appears and has size.
+                        var zuPollCount = 0;
+                        var zuPollFn = function() {{
+                            if (thisGen !== window._renderGen) return;
+                            zuPollCount++;
+                            var fo = svg.querySelector('foreignObject');
+                            var canvas = fo ? fo.querySelector('.inline-block') : null;
+                            var zuW = canvas ? canvas.offsetWidth : 0;
+                            var zuH = canvas ? canvas.offsetHeight : 0;
+                            if ((zuW === 0 || zuH === 0) && zuPollCount < 30) {{
+                                setTimeout(zuPollFn, 100);
+                                return;
+                            }}
+                            if (zuW > 0 && zuH > 0) {{
+                                zuW += 20;
+                                zuH += 20;
+                                svg.style.width = zuW + 'px';
+                                svg.style.minWidth = zuW + 'px';
+                                svg.style.maxWidth = 'none';
+                                svg.style.height = zuH + 'px';
+                                svg.style.minHeight = zuH + 'px';
+                                diagram.style.minWidth = 'auto';
+                                diagram.style.width = 'auto';
+                                diagram.offsetWidth;
+                            }}
+                            
+                            // Set up click handlers
+                            setupNodeClickHandlers(svg);
+                            
+                            // Re-create panzoom
+                            window.panzoomInstance = panzoom(diagram, {{
+                                maxZoom: 10,
+                                minZoom: 0.1,
+                                initialZoom: 1,
+                                bounds: false,
+                                boundsPadding: 0.1
+                            }});
+                            window.panzoomInstance.on('zoom', function(e) {{
+                                window.currentZoom = e.getTransform().scale;
+                                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom, renderGen: window._renderGen }});
+                            }});
+                            if (!fitAfterRender) {{
+                                window.panzoomInstance.zoomAbs(0, 0, savedZoom);
+                                window.currentZoom = savedZoom;
+                            }}
+                            setTimeout(function() {{
+                                if (thisGen !== window._renderGen) return;
+                                if (!fitAfterRender) {{
+                                    window.panzoomInstance.moveTo(savedPanX, savedPanY);
+                                }}
+                                window.chrome.webview.postMessage({{ 
+                                    type: 'diagramReady', 
+                                    targetScrollLeft: savedScrollLeft, 
+                                    targetScrollTop: savedScrollTop,
+                                    targetPanX: savedPanX,
+                                    targetPanY: savedPanY,
+                                    fitAfterRender: !!fitAfterRender
+                                }});
+                            }}, 50);
+                        }};
+                        // Start polling after a short delay for ZenUML to begin rendering
+                        setTimeout(zuPollFn, 200);
+                    }} else if (svg) {{
                         // Wait another frame to ensure text is fully rendered
                         requestAnimationFrame(() => {{
                             if (thisGen !== window._renderGen) return;
