@@ -297,12 +297,6 @@ function bdRenderConnectorLines(diagramArea, c) {
         var fromRect = fromEl.getBoundingClientRect();
         var toRect = toEl.getBoundingClientRect();
 
-        // Convert to coordinates relative to diagramArea
-        var fromCx = fromRect.left + fromRect.width / 2 - areaRect.left;
-        var fromCy = fromRect.top + fromRect.height / 2 - areaRect.top;
-        var toCx = toRect.left + toRect.width / 2 - areaRect.left;
-        var toCy = toRect.top + toRect.height / 2 - areaRect.top;
-
         // Determine connection points at the edges of the blocks
         var pts = bdCalcEdgePoints(fromRect, toRect, areaRect);
         var isEdgeSel = bdSelectedEdge === idx;
@@ -311,16 +305,22 @@ function bdRenderConnectorLines(diagramArea, c) {
         g.style.pointerEvents = 'auto';
         g.style.cursor = 'pointer';
 
-        // Draw the line path
-        var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        var d = bdBuildConnectorPath(pts);
-        path.setAttribute('d', d);
-        path.setAttribute('fill', 'none');
+        // Draw the line path (straight line)
+        var path = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        path.setAttribute('x1', pts.x1);
+        path.setAttribute('y1', pts.y1);
+        path.setAttribute('x2', pts.x2);
+        path.setAttribute('y2', pts.y2);
         path.setAttribute('stroke', isEdgeSel ? (c.text || '#ffffff') : edgeColor);
         path.setAttribute('stroke-width', isEdgeSel ? '2.5' : '1.5');
-        path.setAttribute('marker-end', isEdgeSel ? 'url(#bd-arrowhead-sel)' : 'url(#bd-arrowhead)');
 
-        // Apply edge style
+        // Only show arrowhead for arrow style (-->), not for line style (---)
+        var isArrow = edge.style !== '---';
+        if (isArrow) {
+            path.setAttribute('marker-end', isEdgeSel ? 'url(#bd-arrowhead-sel)' : 'url(#bd-arrowhead)');
+        }
+
+        // Apply edge style variants
         if (edge.style === 'dotted' || edge.style === '-.->') {
             path.setAttribute('stroke-dasharray', '6,3');
         } else if (edge.style === 'thick' || edge.style === '==>') {
@@ -330,22 +330,20 @@ function bdRenderConnectorLines(diagramArea, c) {
         g.appendChild(path);
 
         // Invisible wider hit area for easier clicking
-        var hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        hitPath.setAttribute('d', d);
-        hitPath.setAttribute('fill', 'none');
-        hitPath.setAttribute('stroke', 'transparent');
-        hitPath.setAttribute('stroke-width', '14');
-        hitPath.style.cursor = 'pointer';
-        g.appendChild(hitPath);
+        var hitLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        hitLine.setAttribute('x1', pts.x1);
+        hitLine.setAttribute('y1', pts.y1);
+        hitLine.setAttribute('x2', pts.x2);
+        hitLine.setAttribute('y2', pts.y2);
+        hitLine.setAttribute('stroke', 'transparent');
+        hitLine.setAttribute('stroke-width', '14');
+        hitLine.style.cursor = 'pointer';
+        g.appendChild(hitLine);
 
         // Edge label at midpoint
         if (edge.label) {
             var midX = (pts.x1 + pts.x2) / 2;
             var midY = (pts.y1 + pts.y2) / 2;
-            if (pts.cx !== undefined) {
-                midX = pts.cx;
-                midY = pts.cy;
-            }
 
             var labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             var labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -416,32 +414,6 @@ function bdCalcEdgePoints(fromRect, toRect, areaRect) {
     }
 
     return { x1: x1, y1: y1, x2: x2, y2: y2 };
-}
-
-function bdBuildConnectorPath(pts) {
-    var dx = pts.x2 - pts.x1;
-    var dy = pts.y2 - pts.y1;
-
-    // Use a smooth cubic bezier curve
-    if (Math.abs(dy) > Math.abs(dx)) {
-        // Vertical dominant - curve with vertical control points
-        var cmid = dy / 2;
-        pts.cx = (pts.x1 + pts.x2) / 2;
-        pts.cy = (pts.y1 + pts.y2) / 2;
-        return 'M' + pts.x1 + ',' + pts.y1 +
-               ' C' + pts.x1 + ',' + (pts.y1 + cmid) +
-               ' ' + pts.x2 + ',' + (pts.y2 - cmid) +
-               ' ' + pts.x2 + ',' + pts.y2;
-    } else {
-        // Horizontal dominant - curve with horizontal control points
-        var cmidX = dx / 2;
-        pts.cx = (pts.x1 + pts.x2) / 2;
-        pts.cy = (pts.y1 + pts.y2) / 2;
-        return 'M' + pts.x1 + ',' + pts.y1 +
-               ' C' + (pts.x1 + cmidX) + ',' + pts.y1 +
-               ' ' + (pts.x2 - cmidX) + ',' + pts.y2 +
-               ' ' + pts.x2 + ',' + pts.y2;
-    }
 }
 
 function bdRenderItemsGrid(items, columns, groupId, c) {
