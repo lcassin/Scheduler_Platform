@@ -213,8 +213,11 @@ public partial class VisualEditorBridge
             if (root.TryGetProperty("newId", out var nProp))
             {
                 var newId = nProp.GetString();
-                if (!string.IsNullOrEmpty(newId))
+                if (!string.IsNullOrEmpty(newId) && newId != block.Id)
+                {
+                    UpdateBlockReferences(block.Id, newId);
                     block.Id = newId;
+                }
             }
         }
         else if (item is BlockDiagramArrow arrow)
@@ -228,8 +231,11 @@ public partial class VisualEditorBridge
             if (root.TryGetProperty("newId", out var nProp))
             {
                 var newId = nProp.GetString();
-                if (!string.IsNullOrEmpty(newId))
+                if (!string.IsNullOrEmpty(newId) && newId != arrow.Id)
+                {
+                    UpdateBlockReferences(arrow.Id, newId);
                     arrow.Id = newId;
+                }
             }
         }
         else if (item is BlockDiagramGroup group)
@@ -246,8 +252,11 @@ public partial class VisualEditorBridge
             if (root.TryGetProperty("newId", out var nProp))
             {
                 var newId = nProp.GetString();
-                if (!string.IsNullOrEmpty(newId))
+                if (!string.IsNullOrEmpty(newId) && newId != group.Id)
+                {
+                    UpdateBlockReferences(group.Id, newId);
                     group.Id = newId;
+                }
             }
         }
 
@@ -604,6 +613,39 @@ public partial class VisualEditorBridge
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Updates all references to an old block/arrow/group ID when it is renamed.
+    /// Covers edges (FromId/ToId), class assignments (comma-separated Ids), and inline styles (Id).
+    /// </summary>
+    private void UpdateBlockReferences(string oldId, string newId)
+    {
+        if (_blockDiagramModel == null) return;
+
+        // Update edge references
+        foreach (var edge in _blockDiagramModel.Edges)
+        {
+            if (edge.FromId == oldId) edge.FromId = newId;
+            if (edge.ToId == oldId) edge.ToId = newId;
+        }
+
+        // Update class assignment references (comma-separated ID lists)
+        foreach (var ca in _blockDiagramModel.ClassAssignments)
+        {
+            var ids = ca.Ids.Split(',').Select(s => s.Trim()).ToList();
+            for (int i = 0; i < ids.Count; i++)
+            {
+                if (ids[i] == oldId) ids[i] = newId;
+            }
+            ca.Ids = string.Join(", ", ids);
+        }
+
+        // Update inline style references
+        foreach (var style in _blockDiagramModel.InlineStyles)
+        {
+            if (style.Id == oldId) style.Id = newId;
+        }
     }
 
     // ========== Block Diagram Model Restore ==========

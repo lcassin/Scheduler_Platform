@@ -4612,11 +4612,12 @@ public static class MermaidParser
                 continue;
             }
 
-            // Try to parse as a block definition: id or id["Label"] or id("Label") etc.
-            var block = TryParseBlockElement(trimmed);
-            if (block != null)
+            // Try to parse as block definition(s): supports multiple blocks on one line
+            // e.g. a["Frontend"] b["API Gateway"] c["Auth Service"]
+            var blocks = TryParseBlockElements(trimmed);
+            foreach (var b in blocks)
             {
-                itemStack.Peek().items.Add(block);
+                itemStack.Peek().items.Add(b);
             }
         }
 
@@ -4624,21 +4625,44 @@ public static class MermaidParser
     }
 
     /// <summary>
-    /// Tries to parse a line as a block element with optional shape and width.
+    /// Parses one or more block elements from a single line.
+    /// Supports multiple blocks on one line, e.g.: a["Frontend"] b["API Gateway"] c["Auth Service"]
+    /// </summary>
+    private static List<BlockDiagramBlock> TryParseBlockElements(string text)
+    {
+        var results = new List<BlockDiagramBlock>();
+        var remaining = text.Trim();
+
+        while (!string.IsNullOrEmpty(remaining))
+        {
+            var (block, consumed) = TryParseOneBlockElement(remaining);
+            if (block == null || consumed <= 0)
+                break; // Can't parse anything more
+
+            results.Add(block);
+            remaining = remaining.Substring(consumed).Trim();
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Tries to parse a single block element from the start of the text.
+    /// Returns the parsed block and the number of characters consumed.
     /// Supports: id, id["Label"], id("Label"), id(["Label"]), id[["Label"]], id[("Label")],
     /// id(("Label")), id{"Label"}, id{{"Label"}}, id>"Label"], id[/"Label"/], id[\"Label"\],
     /// id[/"Label"\], id[\"Label"/], id((("Label")))
     /// Width suffix: :N
     /// </summary>
-    private static BlockDiagramBlock? TryParseBlockElement(string text)
+    private static (BlockDiagramBlock? block, int consumed) TryParseOneBlockElement(string text)
     {
-        // Match: id followed by optional shape delimiters and optional :N width
+        // Match: id at the start
         var match = System.Text.RegularExpressions.Regex.Match(text,
-            @"^(\w+)(.*)$");
-        if (!match.Success) return null;
+            @"^(\w+)");
+        if (!match.Success) return (null, 0);
 
         var id = match.Groups[1].Value;
-        var rest = match.Groups[2].Value.Trim();
+        int consumed = match.Length;
 
         // Check if this looks like a keyword we shouldn't parse as a block
         if (id.Equals("block", StringComparison.OrdinalIgnoreCase) ||
@@ -4648,72 +4672,69 @@ public static class MermaidParser
             id.Equals("classDef", StringComparison.OrdinalIgnoreCase) ||
             id.Equals("class", StringComparison.OrdinalIgnoreCase) ||
             id.Equals("style", StringComparison.OrdinalIgnoreCase))
-            return null;
+            return (null, 0);
 
         var block = new BlockDiagramBlock { Id = id };
+        var rest = text.Substring(consumed);
 
-        if (string.IsNullOrEmpty(rest))
-            return block; // bare id, no label/shape
-
-        // Extract width suffix first: everything before possible :N at end
-        int widthSuffix = 1;
-        var widthMatch = System.Text.RegularExpressions.Regex.Match(rest, @":(\d+)\s*$");
-        if (widthMatch.Success)
-        {
-            widthSuffix = int.Parse(widthMatch.Groups[1].Value);
-            rest = rest.Substring(0, widthMatch.Index).Trim();
-        }
-        block.Width = widthSuffix;
-
-        if (string.IsNullOrEmpty(rest))
-            return block;
-
-        // Try to match shape and extract label
-        // Order matters: try most specific patterns first
+        // Try to match shape delimiters immediately after the id
         string? label = null;
         BlockShape shape = BlockShape.Rectangle;
+        int shapeConsumed = 0;
 
-        if (TryExtractBlockLabel(rest, @"^\(\(\(""([^""]*)""\)\)\)", out label)) { shape = BlockShape.DoubleCircle; }
-        else if (TryExtractBlockLabel(rest, @"^\(\(""([^""]*)""\)\)", out label)) { shape = BlockShape.Circle; }
-        else if (TryExtractBlockLabel(rest, @"^\(""([^""]*)""\)", out label)) { shape = BlockShape.Rounded; }
-        else if (TryExtractBlockLabel(rest, @"^\(\[""([^""]*)""\]\)", out label)) { shape = BlockShape.Stadium; }
-        else if (TryExtractBlockLabel(rest, @"^\[\[""([^""]*)""\]\]", out label)) { shape = BlockShape.Subroutine; }
-        else if (TryExtractBlockLabel(rest, @"^\[\(""([^""]*)""\)\]", out label)) { shape = BlockShape.Cylinder; }
-        else if (TryExtractBlockLabel(rest, @"^\{\{""([^""]*)""\}\}", out label)) { shape = BlockShape.Hexagon; }
-        else if (TryExtractBlockLabel(rest, @"^\{""([^""]*)""\}", out label)) { shape = BlockShape.Rhombus; }
-        else if (TryExtractBlockLabel(rest, @"^>""([^""]*)""\]", out label)) { shape = BlockShape.Asymmetric; }
-        else if (TryExtractBlockLabel(rest, @"^\[/""([^""]*)""/\]", out label)) { shape = BlockShape.Parallelogram; }
-        else if (TryExtractBlockLabel(rest, @"^\[\\""([^""]*)""\\]", out label)) { shape = BlockShape.ParallelogramAlt; } // actual backslash in source
-        else if (TryExtractBlockLabel(rest, @"^\[/""([^""]*)""\\]", out label)) { shape = BlockShape.Trapezoid; }
-        else if (TryExtractBlockLabel(rest, @"^\[\\""([^""]*)""/\]", out label)) { shape = BlockShape.TrapezoidAlt; }
-        else if (TryExtractBlockLabel(rest, @"^\[""([^""]*)""\]", out label)) { shape = BlockShape.Rectangle; }
+        if (TryExtractBlockLabelWithLength(rest, @"^\(\(\(""([^""]*)""\)\)\)", out label, out shapeConsumed)) { shape = BlockShape.DoubleCircle; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\(\(""([^""]*)""\)\)", out label, out shapeConsumed)) { shape = BlockShape.Circle; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\(""([^""]*)""\)", out label, out shapeConsumed)) { shape = BlockShape.Rounded; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\(\[""([^""]*)""\]\)", out label, out shapeConsumed)) { shape = BlockShape.Stadium; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\[\[""([^""]*)""\]\]", out label, out shapeConsumed)) { shape = BlockShape.Subroutine; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\[\(""([^""]*)""\)\]", out label, out shapeConsumed)) { shape = BlockShape.Cylinder; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\{\{""([^""]*)""\}\}", out label, out shapeConsumed)) { shape = BlockShape.Hexagon; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\{""([^""]*)""\}", out label, out shapeConsumed)) { shape = BlockShape.Rhombus; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^>""([^""]*)""\]", out label, out shapeConsumed)) { shape = BlockShape.Asymmetric; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\[/""([^""]*)""/\]", out label, out shapeConsumed)) { shape = BlockShape.Parallelogram; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\[\\""([^""]*)""\\]", out label, out shapeConsumed)) { shape = BlockShape.ParallelogramAlt; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\[/""([^""]*)""\\]", out label, out shapeConsumed)) { shape = BlockShape.Trapezoid; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\[\\""([^""]*)""/\]", out label, out shapeConsumed)) { shape = BlockShape.TrapezoidAlt; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\[""([^""]*)""\]", out label, out shapeConsumed)) { shape = BlockShape.Rectangle; }
         // Also support unquoted labels
-        else if (TryExtractBlockLabel(rest, @"^\(\(\(([^)]+)\)\)\)", out label)) { shape = BlockShape.DoubleCircle; }
-        else if (TryExtractBlockLabel(rest, @"^\(\(([^)]+)\)\)", out label)) { shape = BlockShape.Circle; }
-        else if (TryExtractBlockLabel(rest, @"^\(([^)]+)\)", out label)) { shape = BlockShape.Rounded; }
-        else if (TryExtractBlockLabel(rest, @"^\[([^\]]+)\]", out label)) { shape = BlockShape.Rectangle; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\(\(\(([^)]+)\)\)\)", out label, out shapeConsumed)) { shape = BlockShape.DoubleCircle; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\(\(([^)]+)\)\)", out label, out shapeConsumed)) { shape = BlockShape.Circle; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\(([^)]+)\)", out label, out shapeConsumed)) { shape = BlockShape.Rounded; }
+        else if (TryExtractBlockLabelWithLength(rest, @"^\[([^\]]+)\]", out label, out shapeConsumed)) { shape = BlockShape.Rectangle; }
 
         if (label != null)
         {
             block.Label = label.Trim('"');
             block.Shape = shape;
+            consumed += shapeConsumed;
+            rest = text.Substring(consumed);
         }
 
-        return block;
+        // Check for width suffix :N immediately after shape (before any space/next block)
+        var widthMatch = System.Text.RegularExpressions.Regex.Match(rest, @"^:(\d+)");
+        if (widthMatch.Success)
+        {
+            block.Width = int.Parse(widthMatch.Groups[1].Value);
+            consumed += widthMatch.Length;
+        }
+
+        return (block, consumed);
     }
 
     /// <summary>
-    /// Helper to try extracting a block label using a regex pattern.
+    /// Helper to try extracting a block label using a regex pattern, also returning how many characters were consumed.
     /// </summary>
-    private static bool TryExtractBlockLabel(string text, string pattern, out string? label)
+    private static bool TryExtractBlockLabelWithLength(string text, string pattern, out string? label, out int matchLength)
     {
         var m = System.Text.RegularExpressions.Regex.Match(text, pattern);
         if (m.Success)
         {
             label = m.Groups[1].Value;
+            matchLength = m.Length;
             return true;
         }
         label = null;
+        matchLength = 0;
         return false;
     }
 }

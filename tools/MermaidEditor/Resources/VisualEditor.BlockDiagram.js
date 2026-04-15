@@ -122,8 +122,14 @@
     // ========== Rendering ==========
 
     function renderBlockDiagram() {
-        const container = document.getElementById('visual-editor-container');
+        const container = document.getElementById('editorCanvas');
         if (!container || !bdModel) return;
+
+        // Show editorCanvas, hide diagram-svg
+        const diagramSvg = document.getElementById('diagram-svg');
+        if (diagramSvg) diagramSvg.style.display = 'none';
+        container.style.display = 'block';
+
         container.innerHTML = '';
 
         const c = bdColors();
