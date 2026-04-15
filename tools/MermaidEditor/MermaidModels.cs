@@ -2329,3 +2329,280 @@ public class ZenUMLComment : ZenUMLElement
     /// </summary>
     public string Text { get; set; } = string.Empty;
 }
+
+// =============================================
+// Block Diagram Models
+// =============================================
+
+/// <summary>
+/// Represents a Mermaid Block Diagram (block-beta).
+/// Block diagrams use a grid-based layout with columns, nested blocks,
+/// block arrows, connections, and various block shapes.
+/// </summary>
+public class BlockDiagramModel
+{
+    /// <summary>
+    /// Number of columns for the top-level grid layout (default 1 if not specified).
+    /// </summary>
+    public int Columns { get; set; } = 1;
+
+    /// <summary>
+    /// Whether the columns directive was explicitly specified in the source.
+    /// </summary>
+    public bool ColumnsExplicit { get; set; }
+
+    /// <summary>
+    /// All top-level items in the block diagram, in order.
+    /// Items can be blocks, spaces, block arrows, or nested block groups.
+    /// </summary>
+    public List<BlockDiagramItem> Items { get; set; } = new();
+
+    /// <summary>
+    /// Connections/edges between blocks (A --> B, A -- "text" --> B, etc.).
+    /// </summary>
+    public List<BlockDiagramEdge> Edges { get; set; } = new();
+
+    /// <summary>
+    /// Style definitions (classDef name fill:#color,stroke:#color).
+    /// </summary>
+    public List<BlockDiagramStyleDef> StyleDefs { get; set; } = new();
+
+    /// <summary>
+    /// Class assignments (class id className).
+    /// </summary>
+    public List<BlockDiagramClassAssignment> ClassAssignments { get; set; } = new();
+
+    /// <summary>
+    /// Inline style assignments (style id fill:#color,stroke:#color).
+    /// </summary>
+    public List<BlockDiagramInlineStyle> InlineStyles { get; set; } = new();
+
+    /// <summary>
+    /// Comments preserved from the original text.
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines before the block-beta declaration (frontmatter, config directives, etc.).
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The line index of the block-beta declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+}
+
+/// <summary>
+/// Base class for items in a block diagram (blocks, spaces, block arrows, nested groups).
+/// </summary>
+public abstract class BlockDiagramItem { }
+
+/// <summary>
+/// Represents a single block element in a block diagram.
+/// </summary>
+public class BlockDiagramBlock : BlockDiagramItem
+{
+    /// <summary>
+    /// The block identifier (e.g., "A", "myBlock").
+    /// </summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The display label. If null, Id is used.
+    /// </summary>
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// The block shape (rectangle, rounded, stadium, etc.).
+    /// </summary>
+    public BlockShape Shape { get; set; } = BlockShape.Rectangle;
+
+    /// <summary>
+    /// Number of columns this block spans (default 1).
+    /// </summary>
+    public int Width { get; set; } = 1;
+}
+
+/// <summary>
+/// Represents a space placeholder in a block diagram grid.
+/// </summary>
+public class BlockDiagramSpace : BlockDiagramItem
+{
+    /// <summary>
+    /// Number of columns this space spans (default 1).
+    /// </summary>
+    public int Width { get; set; } = 1;
+}
+
+/// <summary>
+/// Represents a block arrow in a block diagram.
+/// blockArrowId&lt;["Label"]&gt;(direction)
+/// </summary>
+public class BlockDiagramArrow : BlockDiagramItem
+{
+    /// <summary>
+    /// The arrow block identifier.
+    /// </summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The display label for the arrow block.
+    /// </summary>
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// The arrow direction (down, up, left, right, x, y).
+    /// </summary>
+    public string Direction { get; set; } = "down";
+
+    /// <summary>
+    /// Number of columns this arrow spans (default 1).
+    /// </summary>
+    public int Width { get; set; } = 1;
+}
+
+/// <summary>
+/// Represents a nested block group: block:id:N ... end
+/// </summary>
+public class BlockDiagramGroup : BlockDiagramItem
+{
+    /// <summary>
+    /// The group identifier.
+    /// </summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The display label (optional).
+    /// </summary>
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// Number of columns in this nested group.
+    /// </summary>
+    public int Columns { get; set; } = 1;
+
+    /// <summary>
+    /// Whether the columns directive was explicitly specified inside this group.
+    /// </summary>
+    public bool ColumnsExplicit { get; set; }
+
+    /// <summary>
+    /// Number of columns this group spans in the parent grid (default 1).
+    /// </summary>
+    public int Width { get; set; } = 1;
+
+    /// <summary>
+    /// Child items inside this nested group.
+    /// </summary>
+    public List<BlockDiagramItem> Items { get; set; } = new();
+}
+
+/// <summary>
+/// Block shapes supported by block-beta diagrams.
+/// </summary>
+public enum BlockShape
+{
+    /// <summary>id["Label"] — square corners</summary>
+    Rectangle,
+    /// <summary>id("Label") — rounded corners</summary>
+    Rounded,
+    /// <summary>id(["Label"]) — stadium/pill shape</summary>
+    Stadium,
+    /// <summary>id[["Label"]] — subroutine shape</summary>
+    Subroutine,
+    /// <summary>id[("Label")] — cylindrical (database)</summary>
+    Cylinder,
+    /// <summary>id(("Label")) — circle</summary>
+    Circle,
+    /// <summary>id{"Label"} — diamond/rhombus</summary>
+    Rhombus,
+    /// <summary>id{{"Label"}} — hexagon</summary>
+    Hexagon,
+    /// <summary>id>"Label"] — asymmetric (flag)</summary>
+    Asymmetric,
+    /// <summary>id[/"Label"/] — parallelogram</summary>
+    Parallelogram,
+    /// <summary>id[\"Label"\] — reverse parallelogram</summary>
+    ParallelogramAlt,
+    /// <summary>id[/"Label"\] — trapezoid</summary>
+    Trapezoid,
+    /// <summary>id[\"Label"/] — reverse trapezoid</summary>
+    TrapezoidAlt,
+    /// <summary>id((("Label"))) — double circle</summary>
+    DoubleCircle
+}
+
+/// <summary>
+/// Represents a connection/edge between blocks in a block diagram.
+/// </summary>
+public class BlockDiagramEdge
+{
+    /// <summary>
+    /// Source block ID.
+    /// </summary>
+    public string FromId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Target block ID.
+    /// </summary>
+    public string ToId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Edge label text (optional).
+    /// </summary>
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// The edge style: "-->" for arrow, "--" for line (no arrow).
+    /// </summary>
+    public string Style { get; set; } = "-->";
+}
+
+/// <summary>
+/// Represents a classDef style definition.
+/// </summary>
+public class BlockDiagramStyleDef
+{
+    /// <summary>
+    /// The class name.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The raw CSS-like style string (e.g., "fill:#f9f,stroke:#333,stroke-width:4px").
+    /// </summary>
+    public string Styles { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Represents a class assignment (class id className).
+/// </summary>
+public class BlockDiagramClassAssignment
+{
+    /// <summary>
+    /// The block ID(s) to apply the class to (comma-separated).
+    /// </summary>
+    public string Ids { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The class name to apply.
+    /// </summary>
+    public string ClassName { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Represents an inline style assignment (style id fill:#color,...).
+/// </summary>
+public class BlockDiagramInlineStyle
+{
+    /// <summary>
+    /// The block ID to style.
+    /// </summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The raw CSS-like style string.
+    /// </summary>
+    public string Styles { get; set; } = string.Empty;
+}

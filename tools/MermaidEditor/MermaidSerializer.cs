@@ -2663,4 +2663,175 @@ public static class MermaidSerializer
             }
         }
     }
+
+    // ========== Block Diagram Serialization ==========
+
+    /// <summary>
+    /// Serializes a BlockDiagramModel back to Mermaid block-beta text.
+    /// </summary>
+    public static string SerializeBlockDiagram(BlockDiagramModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments before declaration
+        WriteBlockDiagramCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write block-beta declaration
+        sb.AppendLine("block-beta");
+
+        // Write columns directive (if explicitly set)
+        if (model.ColumnsExplicit)
+        {
+            sb.AppendLine($"{Indent}columns {model.Columns}");
+        }
+
+        // Write items
+        WriteBlockDiagramItems(sb, model.Items, Indent);
+
+        // Write edges
+        foreach (var edge in model.Edges)
+        {
+            if (!string.IsNullOrEmpty(edge.Label))
+            {
+                sb.AppendLine($"{Indent}{edge.FromId} -- \"{edge.Label}\" --> {edge.ToId}");
+            }
+            else
+            {
+                sb.AppendLine($"{Indent}{edge.FromId} {edge.Style} {edge.ToId}");
+            }
+        }
+
+        // Write style definitions
+        foreach (var styleDef in model.StyleDefs)
+        {
+            sb.AppendLine($"{Indent}classDef {styleDef.Name} {styleDef.Styles}");
+        }
+
+        // Write class assignments
+        foreach (var classAssign in model.ClassAssignments)
+        {
+            sb.AppendLine($"{Indent}class {classAssign.Ids} {classAssign.ClassName}");
+        }
+
+        // Write inline styles
+        foreach (var inlineStyle in model.InlineStyles)
+        {
+            sb.AppendLine($"{Indent}style {inlineStyle.Id} {inlineStyle.Styles}");
+        }
+
+        // Write trailing comments
+        WriteBlockDiagramTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Writes block diagram items recursively (handles nested groups).
+    /// </summary>
+    private static void WriteBlockDiagramItems(StringBuilder sb, List<BlockDiagramItem> items, string indent)
+    {
+        foreach (var item in items)
+        {
+            switch (item)
+            {
+                case BlockDiagramBlock block:
+                    sb.AppendLine($"{indent}{FormatBlockElement(block)}");
+                    break;
+
+                case BlockDiagramSpace space:
+                    if (space.Width > 1)
+                        sb.AppendLine($"{indent}space:{space.Width}");
+                    else
+                        sb.AppendLine($"{indent}space");
+                    break;
+
+                case BlockDiagramArrow arrow:
+                    var arrowWidth = arrow.Width > 1 ? $":{arrow.Width}" : "";
+                    sb.AppendLine($"{indent}{arrow.Id}<[\"{arrow.Label}\"]" + ">(" + arrow.Direction + ")" + arrowWidth);
+                    break;
+
+                case BlockDiagramGroup group:
+                    var groupWidth = group.Width > 1 ? $":{group.Width}" : "";
+                    sb.AppendLine($"{indent}block:{group.Id}{groupWidth}");
+                    if (group.ColumnsExplicit)
+                    {
+                        sb.AppendLine($"{indent}{Indent}columns {group.Columns}");
+                    }
+                    WriteBlockDiagramItems(sb, group.Items, indent + Indent);
+                    sb.AppendLine($"{indent}end");
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Formats a block element with its shape delimiters and width suffix.
+    /// </summary>
+    private static string FormatBlockElement(BlockDiagramBlock block)
+    {
+        var label = block.Label ?? block.Id;
+        var widthSuffix = block.Width > 1 ? $":{block.Width}" : "";
+
+        // If no label (or label equals id) and default shape, emit bare id
+        if (block.Label == null && block.Shape == BlockShape.Rectangle)
+            return $"{block.Id}{widthSuffix}";
+
+        var shaped = block.Shape switch
+        {
+            BlockShape.Rectangle => $"{block.Id}[\"{label}\"]",
+            BlockShape.Rounded => $"{block.Id}(\"{label}\")",
+            BlockShape.Stadium => $"{block.Id}([\"{label}\"])",
+            BlockShape.Subroutine => $"{block.Id}[[\"{label}\"]]",
+            BlockShape.Cylinder => $"{block.Id}[(\"{label}\")]",
+            BlockShape.Circle => $"{block.Id}((\"{label}\"))",
+            BlockShape.Rhombus => $"{block.Id}{{\"{label}\"}}",
+            BlockShape.Hexagon => $"{block.Id}{{{{\"{label}\"}}}}",
+            BlockShape.Asymmetric => $"{block.Id}>\"{label}\"]",
+            BlockShape.Parallelogram => $"{block.Id}[/\"{label}\"/]",
+            BlockShape.ParallelogramAlt => $"{block.Id}[\\\"{label}\"\\]",
+            BlockShape.Trapezoid => $"{block.Id}[/\"{label}\"\\]",
+            BlockShape.TrapezoidAlt => $"{block.Id}[\\\"{label}\"/]",
+            BlockShape.DoubleCircle => $"{block.Id}(((\"{label}\")))",
+            _ => $"{block.Id}[\"{label}\"]"
+        };
+
+        return $"{shaped}{widthSuffix}";
+    }
+
+    private static void WriteBlockDiagramCommentsBeforeLine(StringBuilder sb, BlockDiagramModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    private static void WriteBlockDiagramTrailingComments(StringBuilder sb, BlockDiagramModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
 }

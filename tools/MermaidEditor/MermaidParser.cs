@@ -4416,4 +4416,304 @@ public static class MermaidParser
                 System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : 0.0)
             .ToList();
     }
+
+    // ========== Block Diagram Parsing ==========
+
+    private static readonly Regex BlockDiagramDeclaration = new(@"^\s*block-beta\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex BlockDiagramColumnsPattern = new(@"^\s*columns\s+(\d+)\s*$", RegexOptions.Compiled);
+    private static readonly Regex BlockDiagramSpacePattern = new(@"^\s*space(?::(\d+))?\s*$", RegexOptions.Compiled);
+    private static readonly Regex BlockDiagramGroupStartPattern = new(@"^\s*block\s*:\s*(\w+)(?:\s*:\s*(\d+))?\s*$", RegexOptions.Compiled);
+    private static readonly Regex BlockDiagramGroupEndPattern = new(@"^\s*end\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex BlockDiagramArrowPattern = new(@"^\s*(\w+)\s*<\[""([^""]*)""\]>\((\w+)\)(?::(\d+))?\s*$", RegexOptions.Compiled);
+    private static readonly Regex BlockDiagramEdgePattern = new(@"^\s*(\w+)\s*(-->|---)\s*(?:""([^""]*)""\s*(?:-->|---)\s*)?(\w+)\s*$", RegexOptions.Compiled);
+    private static readonly Regex BlockDiagramEdgeLabeledPattern = new(@"^\s*(\w+)\s*--\s*""([^""]*)""\s*-->\s*(\w+)\s*$", RegexOptions.Compiled);
+    private static readonly Regex BlockDiagramStyleDefPattern = new(@"^\s*classDef\s+(\w+)\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex BlockDiagramClassPattern = new(@"^\s*class\s+(.+?)\s+(\w+)\s*$", RegexOptions.Compiled);
+    private static readonly Regex BlockDiagramInlineStylePattern = new(@"^\s*style\s+(\w+)\s+(.+)$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses a block-beta diagram into a BlockDiagramModel.
+    /// </summary>
+    public static BlockDiagramModel? ParseBlockDiagram(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new BlockDiagramModel();
+        bool foundDeclaration = false;
+
+        // Stack for nested block groups: top is the current item list and columns
+        var itemStack = new Stack<(List<BlockDiagramItem> items, BlockDiagramGroup? group)>();
+        itemStack.Push((model.Items, null));
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                model.Comments.Add(new CommentEntry
+                {
+                    Text = commentMatch.Groups[1].Value,
+                    OriginalLineIndex = i
+                });
+                continue;
+            }
+
+            // Look for block-beta declaration
+            if (!foundDeclaration)
+            {
+                var declMatch = BlockDiagramDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    foundDeclaration = true;
+                    model.DeclarationLineIndex = i;
+                    continue;
+                }
+
+                model.PreambleLines.Add(line);
+                continue;
+            }
+
+            var trimmed = line.Trim();
+
+            // columns N
+            var columnsMatch = BlockDiagramColumnsPattern.Match(trimmed);
+            if (columnsMatch.Success)
+            {
+                var cols = int.Parse(columnsMatch.Groups[1].Value);
+                var (_, group) = itemStack.Peek();
+                if (group != null)
+                {
+                    group.Columns = cols;
+                    group.ColumnsExplicit = true;
+                }
+                else
+                {
+                    model.Columns = cols;
+                    model.ColumnsExplicit = true;
+                }
+                continue;
+            }
+
+            // space or space:N
+            var spaceMatch = BlockDiagramSpacePattern.Match(trimmed);
+            if (spaceMatch.Success)
+            {
+                var width = spaceMatch.Groups[1].Success ? int.Parse(spaceMatch.Groups[1].Value) : 1;
+                itemStack.Peek().items.Add(new BlockDiagramSpace { Width = width });
+                continue;
+            }
+
+            // block:id:N (nested group start)
+            var groupStartMatch = BlockDiagramGroupStartPattern.Match(trimmed);
+            if (groupStartMatch.Success)
+            {
+                var groupId = groupStartMatch.Groups[1].Value;
+                var groupWidth = groupStartMatch.Groups[2].Success ? int.Parse(groupStartMatch.Groups[2].Value) : 1;
+                var group = new BlockDiagramGroup { Id = groupId, Width = groupWidth };
+                itemStack.Peek().items.Add(group);
+                itemStack.Push((group.Items, group));
+                continue;
+            }
+
+            // end (close nested group)
+            var endMatch = BlockDiagramGroupEndPattern.Match(trimmed);
+            if (endMatch.Success && itemStack.Count > 1)
+            {
+                itemStack.Pop();
+                continue;
+            }
+
+            // blockArrowId<["Label"]>(direction):width
+            var arrowMatch = BlockDiagramArrowPattern.Match(trimmed);
+            if (arrowMatch.Success)
+            {
+                var arrow = new BlockDiagramArrow
+                {
+                    Id = arrowMatch.Groups[1].Value,
+                    Label = arrowMatch.Groups[2].Value,
+                    Direction = arrowMatch.Groups[3].Value,
+                    Width = arrowMatch.Groups[4].Success ? int.Parse(arrowMatch.Groups[4].Value) : 1
+                };
+                itemStack.Peek().items.Add(arrow);
+                continue;
+            }
+
+            // Edge with label: A -- "text" --> B
+            var edgeLabeledMatch = BlockDiagramEdgeLabeledPattern.Match(trimmed);
+            if (edgeLabeledMatch.Success)
+            {
+                model.Edges.Add(new BlockDiagramEdge
+                {
+                    FromId = edgeLabeledMatch.Groups[1].Value,
+                    Label = edgeLabeledMatch.Groups[2].Value,
+                    ToId = edgeLabeledMatch.Groups[3].Value,
+                    Style = "-->"
+                });
+                continue;
+            }
+
+            // Edge: A --> B or A --- B
+            var edgeMatch = BlockDiagramEdgePattern.Match(trimmed);
+            if (edgeMatch.Success)
+            {
+                model.Edges.Add(new BlockDiagramEdge
+                {
+                    FromId = edgeMatch.Groups[1].Value,
+                    Style = edgeMatch.Groups[2].Value,
+                    Label = edgeMatch.Groups[3].Success && !string.IsNullOrEmpty(edgeMatch.Groups[3].Value)
+                        ? edgeMatch.Groups[3].Value : null,
+                    ToId = edgeMatch.Groups[4].Value
+                });
+                continue;
+            }
+
+            // classDef
+            var styleDefMatch = BlockDiagramStyleDefPattern.Match(trimmed);
+            if (styleDefMatch.Success)
+            {
+                model.StyleDefs.Add(new BlockDiagramStyleDef
+                {
+                    Name = styleDefMatch.Groups[1].Value,
+                    Styles = styleDefMatch.Groups[2].Value.Trim()
+                });
+                continue;
+            }
+
+            // class assignment
+            var classMatch = BlockDiagramClassPattern.Match(trimmed);
+            if (classMatch.Success)
+            {
+                model.ClassAssignments.Add(new BlockDiagramClassAssignment
+                {
+                    Ids = classMatch.Groups[1].Value.Trim(),
+                    ClassName = classMatch.Groups[2].Value
+                });
+                continue;
+            }
+
+            // inline style
+            var inlineStyleMatch = BlockDiagramInlineStylePattern.Match(trimmed);
+            if (inlineStyleMatch.Success)
+            {
+                model.InlineStyles.Add(new BlockDiagramInlineStyle
+                {
+                    Id = inlineStyleMatch.Groups[1].Value,
+                    Styles = inlineStyleMatch.Groups[2].Value.Trim()
+                });
+                continue;
+            }
+
+            // Try to parse as a block definition: id or id["Label"] or id("Label") etc.
+            var block = TryParseBlockElement(trimmed);
+            if (block != null)
+            {
+                itemStack.Peek().items.Add(block);
+            }
+        }
+
+        return foundDeclaration ? model : null;
+    }
+
+    /// <summary>
+    /// Tries to parse a line as a block element with optional shape and width.
+    /// Supports: id, id["Label"], id("Label"), id(["Label"]), id[["Label"]], id[("Label")],
+    /// id(("Label")), id{"Label"}, id{{"Label"}}, id>"Label"], id[/"Label"/], id[\"Label"\],
+    /// id[/"Label"\], id[\"Label"/], id((("Label")))
+    /// Width suffix: :N
+    /// </summary>
+    private static BlockDiagramBlock? TryParseBlockElement(string text)
+    {
+        // Match: id followed by optional shape delimiters and optional :N width
+        var match = System.Text.RegularExpressions.Regex.Match(text,
+            @"^(\w+)(.*)$");
+        if (!match.Success) return null;
+
+        var id = match.Groups[1].Value;
+        var rest = match.Groups[2].Value.Trim();
+
+        // Check if this looks like a keyword we shouldn't parse as a block
+        if (id.Equals("block", StringComparison.OrdinalIgnoreCase) ||
+            id.Equals("end", StringComparison.OrdinalIgnoreCase) ||
+            id.Equals("columns", StringComparison.OrdinalIgnoreCase) ||
+            id.Equals("space", StringComparison.OrdinalIgnoreCase) ||
+            id.Equals("classDef", StringComparison.OrdinalIgnoreCase) ||
+            id.Equals("class", StringComparison.OrdinalIgnoreCase) ||
+            id.Equals("style", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var block = new BlockDiagramBlock { Id = id };
+
+        if (string.IsNullOrEmpty(rest))
+            return block; // bare id, no label/shape
+
+        // Extract width suffix first: everything before possible :N at end
+        int widthSuffix = 1;
+        var widthMatch = System.Text.RegularExpressions.Regex.Match(rest, @":(\d+)\s*$");
+        if (widthMatch.Success)
+        {
+            widthSuffix = int.Parse(widthMatch.Groups[1].Value);
+            rest = rest.Substring(0, widthMatch.Index).Trim();
+        }
+        block.Width = widthSuffix;
+
+        if (string.IsNullOrEmpty(rest))
+            return block;
+
+        // Try to match shape and extract label
+        // Order matters: try most specific patterns first
+        string? label = null;
+        BlockShape shape = BlockShape.Rectangle;
+
+        if (TryExtractBlockLabel(rest, @"^\(\(\(""([^""]*)""\)\)\)", out label)) { shape = BlockShape.DoubleCircle; }
+        else if (TryExtractBlockLabel(rest, @"^\(\(""([^""]*)""\)\)", out label)) { shape = BlockShape.Circle; }
+        else if (TryExtractBlockLabel(rest, @"^\(""([^""]*)""\)", out label)) { shape = BlockShape.Rounded; }
+        else if (TryExtractBlockLabel(rest, @"^\(\[""([^""]*)""\]\)", out label)) { shape = BlockShape.Stadium; }
+        else if (TryExtractBlockLabel(rest, @"^\[\[""([^""]*)""\]\]", out label)) { shape = BlockShape.Subroutine; }
+        else if (TryExtractBlockLabel(rest, @"^\[\(""([^""]*)""\)\]", out label)) { shape = BlockShape.Cylinder; }
+        else if (TryExtractBlockLabel(rest, @"^\{\{""([^""]*)""\}\}", out label)) { shape = BlockShape.Hexagon; }
+        else if (TryExtractBlockLabel(rest, @"^\{""([^""]*)""\}", out label)) { shape = BlockShape.Rhombus; }
+        else if (TryExtractBlockLabel(rest, @"^>""([^""]*)""\]", out label)) { shape = BlockShape.Asymmetric; }
+        else if (TryExtractBlockLabel(rest, @"^\[/""([^""]*)""/\]", out label)) { shape = BlockShape.Parallelogram; }
+        else if (TryExtractBlockLabel(rest, @"^\[\\""([^""]*)""\\]", out label)) { shape = BlockShape.ParallelogramAlt; } // actual backslash in source
+        else if (TryExtractBlockLabel(rest, @"^\[/""([^""]*)""\\]", out label)) { shape = BlockShape.Trapezoid; }
+        else if (TryExtractBlockLabel(rest, @"^\[\\""([^""]*)""/\]", out label)) { shape = BlockShape.TrapezoidAlt; }
+        else if (TryExtractBlockLabel(rest, @"^\[""([^""]*)""\]", out label)) { shape = BlockShape.Rectangle; }
+        // Also support unquoted labels
+        else if (TryExtractBlockLabel(rest, @"^\(\(\(([^)]+)\)\)\)", out label)) { shape = BlockShape.DoubleCircle; }
+        else if (TryExtractBlockLabel(rest, @"^\(\(([^)]+)\)\)", out label)) { shape = BlockShape.Circle; }
+        else if (TryExtractBlockLabel(rest, @"^\(([^)]+)\)", out label)) { shape = BlockShape.Rounded; }
+        else if (TryExtractBlockLabel(rest, @"^\[([^\]]+)\]", out label)) { shape = BlockShape.Rectangle; }
+
+        if (label != null)
+        {
+            block.Label = label.Trim('"');
+            block.Shape = shape;
+        }
+
+        return block;
+    }
+
+    /// <summary>
+    /// Helper to try extracting a block label using a regex pattern.
+    /// </summary>
+    private static bool TryExtractBlockLabel(string text, string pattern, out string? label)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(text, pattern);
+        if (m.Success)
+        {
+            label = m.Groups[1].Value;
+            return true;
+        }
+        label = null;
+        return false;
+    }
 }

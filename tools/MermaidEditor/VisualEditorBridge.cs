@@ -23,7 +23,8 @@ public enum ActiveDiagramType
     QuadrantChart,
     GitGraph,
     XYChart,
-    ZenUML
+    ZenUML,
+    Block
 }
 
 /// <summary>
@@ -275,6 +276,12 @@ public partial class VisualEditorBridge
                 await RestoreXYChartToEditorAsync();
                 RaiseXYChartModelChanged("undo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.Block)
+            {
+                RestoreBlockDiagramModelFromJson(previousJson);
+                await RestoreBlockDiagramToEditorAsync();
+                RaiseBlockDiagramModelChanged("undo");
+            }
             else
             {
                 RestoreModelFromJson(previousJson);
@@ -386,6 +393,12 @@ public partial class VisualEditorBridge
                 await RestoreXYChartToEditorAsync();
                 RaiseXYChartModelChanged("redo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.Block)
+            {
+                RestoreBlockDiagramModelFromJson(redoJson);
+                await RestoreBlockDiagramToEditorAsync();
+                RaiseBlockDiagramModelChanged("redo");
+            }
             else
             {
                 RestoreModelFromJson(redoJson);
@@ -430,6 +443,8 @@ public partial class VisualEditorBridge
             return ConvertZenUMLModelToJson(_zenUMLModel);
         if (_activeDiagramType == ActiveDiagramType.XYChart && _xyChartModel != null)
             return ConvertXYChartModelToJson(_xyChartModel);
+        if (_activeDiagramType == ActiveDiagramType.Block && _blockDiagramModel != null)
+            return ConvertBlockDiagramModelToJson(_blockDiagramModel);
         return ConvertModelToJson(_model);
     }
 
@@ -1141,6 +1156,56 @@ public partial class VisualEditorBridge
 
                 case "xy_columnMoved":
                     HandleXYChartColumnMoved(root);
+                    break;
+
+                // ===== Block Diagram Messages =====
+
+                case "bd_blockCreated":
+                    HandleBlockDiagramBlockCreated(root);
+                    break;
+
+                case "bd_blockEdited":
+                    HandleBlockDiagramBlockEdited(root);
+                    break;
+
+                case "bd_blockDeleted":
+                    HandleBlockDiagramBlockDeleted(root);
+                    break;
+
+                case "bd_blockMoved":
+                    HandleBlockDiagramBlockMoved(root);
+                    break;
+
+                case "bd_edgeCreated":
+                    HandleBlockDiagramEdgeCreated(root);
+                    break;
+
+                case "bd_edgeEdited":
+                    HandleBlockDiagramEdgeEdited(root);
+                    break;
+
+                case "bd_edgeDeleted":
+                    HandleBlockDiagramEdgeDeleted(root);
+                    break;
+
+                case "bd_spaceCreated":
+                    HandleBlockDiagramSpaceCreated(root);
+                    break;
+
+                case "bd_spaceEdited":
+                    HandleBlockDiagramSpaceEdited(root);
+                    break;
+
+                case "bd_arrowCreated":
+                    HandleBlockDiagramArrowCreated(root);
+                    break;
+
+                case "bd_groupCreated":
+                    HandleBlockDiagramGroupCreated(root);
+                    break;
+
+                case "bd_settingsChanged":
+                    HandleBlockDiagramSettingsChanged(root);
                     break;
             }
         }

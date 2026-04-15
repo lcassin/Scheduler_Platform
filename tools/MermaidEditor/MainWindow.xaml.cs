@@ -133,6 +133,7 @@ public partial class MainWindow : Window
     private GitGraphModel? _currentGitGraphModel;
     private ZenUMLModel? _currentZenUMLModel;
     private XYChartModel? _currentXYChartModel;
+    private BlockDiagramModel? _currentBlockDiagramModel;
     private bool _isVisualEditorUpdating; // Prevent re-entrant updates between text <-> visual
     private bool _visualEditorHasFocus; // Tracks whether the Visual Editor pane has focus (for toolbar enable/disable)
 
@@ -5118,6 +5119,7 @@ Console.WriteLine(""Hello, World!"");
                     "MermaidEditor.Resources.VisualEditor.GitGraph.js",
                     "MermaidEditor.Resources.VisualEditor.ZenUML.js",
                     "MermaidEditor.Resources.VisualEditor.XYChart.js",
+                    "MermaidEditor.Resources.VisualEditor.BlockDiagram.js",
                 };
                 var injectedJs = new System.Text.StringBuilder();
                 foreach (var jsFile in jsFiles)
@@ -5155,6 +5157,7 @@ Console.WriteLine(""Hello, World!"");
             _visualEditorBridge.GitGraphModelChanged += VisualEditorBridge_GitGraphModelChanged;
             _visualEditorBridge.ZenUMLModelChanged += VisualEditorBridge_ZenUMLModelChanged;
             _visualEditorBridge.XYChartModelChanged += VisualEditorBridge_XYChartModelChanged;
+            _visualEditorBridge.BlockDiagramModelChanged += VisualEditorBridge_BlockDiagramModelChanged;
             _visualEditorBridge.EditorReady += VisualEditorBridge_EditorReady;
 
             // Wire up focus tracking for code-only toolbar enable/disable
@@ -5320,6 +5323,10 @@ Console.WriteLine(""Hello, World!"");
             else if (_currentXYChartModel != null)
             {
                 await _visualEditorBridge.UpdateXYChartModelAsync(_currentXYChartModel);
+            }
+            else if (_currentBlockDiagramModel != null)
+            {
+                await _visualEditorBridge.UpdateBlockDiagramModelAsync(_currentBlockDiagramModel);
             }
             else if (_currentFlowchartModel != null)
             {
@@ -5843,6 +5850,40 @@ Console.WriteLine(""Hello, World!"");
     }
 
     /// <summary>
+    /// Called when the visual editor modifies the BlockDiagramModel.
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private async void VisualEditorBridge_BlockDiagramModelChanged(object? sender, BlockDiagramModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            var text = MermaidSerializer.SerializeBlockDiagram(e.Model);
+
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true;
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+                RenderPreview();
+                await _visualEditorBridge.RefreshBlockDiagramAsync();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
     /// Updates the visibility of the visual editor mode toolbar based on the current render mode.
     /// Only visible for Mermaid files.
     /// </summary>
@@ -6015,6 +6056,10 @@ Console.WriteLine(""Hello, World!"");
                 else if (_currentXYChartModel != null)
                 {
                     text = MermaidSerializer.SerializeXYChart(_currentXYChartModel);
+                }
+                else if (_currentBlockDiagramModel != null)
+                {
+                    text = MermaidSerializer.SerializeBlockDiagram(_currentBlockDiagramModel);
                 }
                 else if (_currentFlowchartModel != null)
                 {
@@ -6215,6 +6260,16 @@ Console.WriteLine(""Hello, World!"");
                     await _visualEditorBridge.UpdateXYChartModelAsync(_currentXYChartModel);
                 }
             }
+            else if (IsBlockDiagram(text))
+            {
+                var parsed = MermaidParser.ParseBlockDiagram(text);
+                if (parsed != null)
+                {
+                    ClearAllModels();
+                    _currentBlockDiagramModel = parsed;
+                    await _visualEditorBridge.UpdateBlockDiagramModelAsync(_currentBlockDiagramModel);
+                }
+            }
             else
             {
                 var parsed = MermaidParser.ParseFlowchart(text);
@@ -6249,7 +6304,7 @@ Console.WriteLine(""Hello, World!"");
         // Flowcharts, sequence, class, state, ER, gantt, mindmap, and pie diagrams have visual editing support
         return IsFlowchart(text) || IsSequenceDiagram(text) || IsClassDiagram(text) || IsStateDiagram(text) || IsERDiagram(text)
             || IsGanttDiagram(text) || IsMindMapDiagram(text) || IsPieChartDiagram(text) || IsTimelineDiagram(text) || IsJourneyDiagram(text)
-            || IsQuadrantChartDiagram(text) || IsGitGraphDiagram(text) || IsXYChartDiagram(text) || IsZenUMLDiagram(text);
+            || IsQuadrantChartDiagram(text) || IsGitGraphDiagram(text) || IsXYChartDiagram(text) || IsZenUMLDiagram(text) || IsBlockDiagram(text);
     }
 
     /// <summary>
@@ -6435,6 +6490,15 @@ Console.WriteLine(""Hello, World!"");
     }
 
     /// <summary>
+    /// Detects whether the given Mermaid text is a block diagram.
+    /// </summary>
+    private static bool IsBlockDiagram(string text)
+    {
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && line.Equals("block-beta", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Clears all diagram model references. Called before setting a new active model.
     /// </summary>
     private void ClearAllModels()
@@ -6453,6 +6517,7 @@ Console.WriteLine(""Hello, World!"");
         _currentGitGraphModel = null;
         _currentZenUMLModel = null;
         _currentXYChartModel = null;
+        _currentBlockDiagramModel = null;
     }
 
     /// <summary>
@@ -9864,6 +9929,7 @@ Console.WriteLine(""Hello, World!"");
         _currentGitGraphModel = null;
         _currentZenUMLModel = null;
         _currentXYChartModel = null;
+        _currentBlockDiagramModel = null;
         
         // Switch to new document
         _activeDocument = doc;
