@@ -3636,8 +3636,10 @@ public static class MermaidParser
                 continue;
             }
 
-            // Empty lines and comments are part of the declaration block
-            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("//") || trimmed.StartsWith("%%"))
+            // Empty lines and %% comments are part of the declaration block.
+            // Note: // comments are NOT included here — they get added to model.Elements by
+            // ParseZenUMLElements and would be duplicated if also in RawDeclarationLines.
+            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("%%"))
             {
                 declEnd = i + 1;
                 continue;

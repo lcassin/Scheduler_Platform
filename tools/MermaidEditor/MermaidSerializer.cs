@@ -2179,12 +2179,11 @@ public static class MermaidSerializer
         // Write declaration block: use raw lines if available (preserves groups, colors, @Starter, etc.)
         if (model.RawDeclarationLines.Count > 0)
         {
-            // Build a map of participant annotator changes to patch raw lines
-            var annotatorChanges = new Dictionary<string, ZenUMLAnnotator>();
+            // Build a map of original declaration lines to new annotators for exact-match patching
+            var linePatchMap = new Dictionary<string, ZenUMLAnnotator>();
             foreach (var p in model.Participants.Where(p => p.IsExplicit && p.OriginalDeclarationLine != null))
             {
-                // Check if the annotator was changed from the original line
-                var origLine = p.OriginalDeclarationLine!.TrimStart();
+                var origLine = p.OriginalDeclarationLine!.Trim();
                 if (origLine.StartsWith("@"))
                 {
                     var spaceIdx = origLine.IndexOf(' ');
@@ -2194,40 +2193,25 @@ public static class MermaidSerializer
                         var currentAnnotator = p.Annotator.ToString().ToLowerInvariant();
                         if (origAnnotator != currentAnnotator && p.Annotator != ZenUMLAnnotator.None)
                         {
-                            annotatorChanges[p.Id] = p.Annotator;
+                            linePatchMap[origLine] = p.Annotator;
                         }
                     }
                 }
             }
 
-            // Output raw declaration lines, patching any changed annotators
+            // Output raw declaration lines, patching any changed annotators using exact line match
             foreach (var rawLine in model.RawDeclarationLines)
             {
-                var patched = false;
                 var trimmedRaw = rawLine.Trim();
-                if (trimmedRaw.StartsWith("@") && annotatorChanges.Count > 0)
+                if (linePatchMap.TryGetValue(trimmedRaw, out var newAnnotator))
                 {
-                    // Check if this line declares a participant whose annotator changed
-                    foreach (var change in annotatorChanges)
-                    {
-                        // Match lines like "@Entity Database #FFF0B3" or "@Actor Customer"
-                        if (trimmedRaw.Contains(change.Key))
-                        {
-                            var spaceIdx = trimmedRaw.IndexOf(' ');
-                            if (spaceIdx > 0)
-                            {
-                                // Get the leading whitespace from the original line
-                                var leadingWhitespace = rawLine.Substring(0, rawLine.Length - rawLine.TrimStart().Length);
-                                // Replace the annotator name, keep everything after the first space
-                                var rest = trimmedRaw.Substring(spaceIdx);
-                                sb.AppendLine($"{leadingWhitespace}@{change.Value}{rest}");
-                                patched = true;
-                                break;
-                            }
-                        }
-                    }
+                    // Exact match found — patch the annotator keyword, keep everything else
+                    var leadingWhitespace = rawLine.Substring(0, rawLine.Length - rawLine.TrimStart().Length);
+                    var spaceIdx = trimmedRaw.IndexOf(' ');
+                    var rest = trimmedRaw.Substring(spaceIdx);
+                    sb.AppendLine($"{leadingWhitespace}@{newAnnotator}{rest}");
                 }
-                if (!patched)
+                else
                 {
                     sb.AppendLine(rawLine);
                 }
