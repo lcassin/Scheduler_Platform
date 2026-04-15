@@ -1605,6 +1605,21 @@ Console.WriteLine(""Hello, World!"");
         // Register ZenUML plugin first, then use updateDiagram for actual rendering.
         // This ensures we use the exact same rendering path as the fast-update path,
         // which correctly handles all diagram types including architecture and ZenUML.
+        
+        // Capture the initial code SYNCHRONOUSLY before any async operations.
+        // If we read codeEl.textContent inside the async .then() callback, a race
+        // condition can occur: C# may call updateDiagram() (via ExecuteScriptAsync)
+        // while initPlugins() is still loading the ZenUML CDN module.  That first
+        // updateDiagram call renders the <pre>, replacing its textContent with the
+        // rendered CSS + SVG output.  When initPlugins().then() finally resolves it
+        // would read the rendered CSS as source code and feed it back to Mermaid,
+        // causing 'No diagram type detected' errors.
+        var _initialCode = (function() {{
+            var el = document.querySelector('#diagram pre.mermaid');
+            return el ? el.textContent : '';
+        }})();
+        var _initialRenderGen = window._renderGen;
+        
         async function initPlugins() {{
             try {{
                 const zenuml = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.2/dist/mermaid-zenuml.esm.min.mjs');
@@ -1616,15 +1631,15 @@ Console.WriteLine(""Hello, World!"");
             }});
         }}
         initPlugins().then(() => {{
+            // If C# already called updateDiagram while plugins were loading
+            // (renderGen changed), skip this initial render -- it would be stale.
+            if (window._renderGen !== _initialRenderGen) return;
+            
             const diagram = document.getElementById('diagram');
-            // Get the mermaid code from the pre element, then use updateDiagram
-            // which handles all diagram types correctly (architecture, ZenUML, Gantt, etc.)
-            var codeEl = document.querySelector('#diagram pre.mermaid');
-            var code = codeEl ? codeEl.textContent : '';
             // Clear the pre element (updateDiagram will recreate it)
             diagram.innerHTML = '';
-            // Use updateDiagram with the target restore positions
-            window.updateDiagram(code, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY, fitAfterRender, window._renderGen);
+            // Use the code captured synchronously before any async work
+            window.updateDiagram(_initialCode, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY, fitAfterRender, window._renderGen);
         }}).catch(() => {{
             // Fallback: just initialize panzoom on whatever is rendered
             const diagram = document.getElementById('diagram');
