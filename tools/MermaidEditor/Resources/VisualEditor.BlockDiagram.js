@@ -145,7 +145,7 @@ function renderBlockDiagram() {
 
     var wrapper = document.createElement('div');
     wrapper.id = 'bd-wrapper';
-    wrapper.style.cssText = 'padding:20px;padding-top:8px;font-family:\'Segoe UI\',Tahoma,Geneva,Verdana,sans-serif;color:' + c.text + ';min-height:100%;';
+    wrapper.style.cssText = 'padding:20px;padding-top:48px;font-family:\'Segoe UI\',Tahoma,Geneva,Verdana,sans-serif;color:' + c.text + ';min-height:100%;';
 
     // Diagram area
     var diagramArea = document.createElement('div');

@@ -2768,10 +2768,12 @@
 
         function _applyEditorCanvasZoom(newZoom) {
             const svgEl = _getEditorCanvasSvg();
-            if (!svgEl) return;
+            // Block Diagram uses DOM divs instead of SVG - target the bd-wrapper
+            const zoomTarget = svgEl || (document.getElementById('bd-wrapper'));
+            if (!zoomTarget) return;
             editorCanvasZoom = Math.max(0.2, Math.min(5, newZoom));
-            svgEl.style.transformOrigin = 'top left';
-            svgEl.style.transform = 'scale(' + editorCanvasZoom + ')';
+            zoomTarget.style.transformOrigin = 'top left';
+            zoomTarget.style.transform = 'scale(' + editorCanvasZoom + ')';
             // Update minimap after zoom change
             updateMinimap();
         }
@@ -2787,10 +2789,12 @@
         function _editorCanvasFitToView() {
             const svgEl = _getEditorCanvasSvg();
             const ec = document.getElementById('editorCanvas');
-            if (!svgEl || !ec) return;
-            // Get the natural (unscaled) size of the SVG
-            const naturalW = parseFloat(svgEl.getAttribute('width')) || svgEl.getBBox().width || 800;
-            const naturalH = parseFloat(svgEl.getAttribute('height')) || svgEl.getBBox().height || 600;
+            // Block Diagram uses DOM divs - target bd-wrapper for fit
+            const fitTarget = svgEl || document.getElementById('bd-wrapper');
+            if (!fitTarget || !ec) return;
+            // Get the natural (unscaled) size
+            const naturalW = fitTarget.tagName === 'svg' ? (parseFloat(fitTarget.getAttribute('width')) || fitTarget.getBBox().width || 800) : (fitTarget.scrollWidth || 800);
+            const naturalH = fitTarget.tagName === 'svg' ? (parseFloat(fitTarget.getAttribute('height')) || fitTarget.getBBox().height || 600) : (fitTarget.scrollHeight || 600);
             const containerW = ec.clientWidth;
             const containerH = ec.clientHeight;
             if (naturalW <= 0 || naturalH <= 0 || containerW <= 0 || containerH <= 0) return;

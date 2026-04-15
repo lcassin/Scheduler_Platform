@@ -2756,7 +2756,8 @@ public static class MermaidSerializer
 
                 case BlockDiagramArrow arrow:
                     var arrowWidth = arrow.Width > 1 ? $":{arrow.Width}" : "";
-                    sb.AppendLine($"{indent}{arrow.Id}<[\"{arrow.Label}\"]" + ">(" + arrow.Direction + ")" + arrowWidth);
+                    var arrowLabel = string.IsNullOrEmpty(arrow.Label) ? arrow.Id : arrow.Label;
+                    sb.AppendLine($"{indent}{arrow.Id}<[\"{arrowLabel}\"]" + ">(" + arrow.Direction + ")" + arrowWidth);
                     break;
 
                 case BlockDiagramGroup group:
