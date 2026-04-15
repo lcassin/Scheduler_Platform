@@ -2058,8 +2058,14 @@ Console.WriteLine(""Hello, World!"");
                             let svgWidth = 0;
                             let svgHeight = 0;
                             
-                            // Use getBBox for accurate dimensions (includes all rendered content)
+                            // Use getBBox for accurate dimensions (includes all rendered content).
+                            // For Gantt charts, temporarily hide the .today marker line
+                            // before computing getBBox -- the today line can extend thousands
+                            // of pixels beyond the chart when the current date is far from
+                            // the chart's date range, inflating the bounding box enormously.
                             var bboxX = 0, bboxY = 0;
+                            var todayGroup = isGantt ? svg.querySelector('.today') : null;
+                            if (todayGroup) todayGroup.style.display = 'none';
                             try {{
                                 const bbox = svg.getBBox();
                                 bboxX = bbox.x;
@@ -2079,6 +2085,8 @@ Console.WriteLine(""Hello, World!"");
                                     }}
                                 }}
                             }}
+                            // Restore the today marker after measuring
+                            if (todayGroup) todayGroup.style.display = '';
                             
                             if (svgWidth > 0 && svgHeight > 0) {{
                                 // Override Mermaid's inline styles that conflict with our sizing.
