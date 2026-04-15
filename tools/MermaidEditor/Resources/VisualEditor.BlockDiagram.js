@@ -147,14 +147,15 @@ function renderBlockDiagram() {
     wrapper.id = 'bd-wrapper';
     wrapper.style.cssText = 'padding:20px;padding-top:48px;font-family:\'Segoe UI\',Tahoma,Geneva,Verdana,sans-serif;color:' + c.text + ';min-height:100%;';
 
-    // Diagram area
+    // Diagram area - needs position:relative for SVG overlay
     var diagramArea = document.createElement('div');
     diagramArea.id = 'bd-diagram';
+    diagramArea.style.position = 'relative';
 
     // Render top-level grid
     diagramArea.appendChild(bdRenderItemsGrid(bdModel.items || [], bdModel.columns || 1, null, c));
 
-    // Render edges section
+    // Render edges section (text list)
     if (bdModel.edges && bdModel.edges.length > 0) {
         var edgesSection = document.createElement('div');
         edgesSection.style.cssText = 'margin-top:16px;padding:12px;border:1px dashed ' + c.border + ';border-radius:6px;';
@@ -226,8 +227,220 @@ function renderBlockDiagram() {
 
     canvas.appendChild(wrapper);
 
+    // Draw visual connector lines after DOM layout settles
+    if (bdModel.edges && bdModel.edges.length > 0) {
+        setTimeout(function() { bdRenderConnectorLines(diagramArea, c); }, 0);
+    }
+
     if (typeof window.updateVisualEditorMinimap === 'function') {
         window.updateVisualEditorMinimap();
+    }
+}
+
+// ========== Visual Connector Lines ==========
+
+function bdRenderConnectorLines(diagramArea, c) {
+    // Remove any existing SVG overlay
+    var existing = diagramArea.querySelector('.bd-connector-svg');
+    if (existing) existing.remove();
+
+    if (!bdModel || !bdModel.edges || bdModel.edges.length === 0) return;
+
+    var areaRect = diagramArea.getBoundingClientRect();
+    if (areaRect.width === 0 || areaRect.height === 0) return;
+
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.classList.add('bd-connector-svg');
+    svg.setAttribute('width', areaRect.width);
+    svg.setAttribute('height', areaRect.height);
+    svg.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:1;overflow:visible;';
+
+    // Define arrowhead marker
+    var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    var edgeColor = c.selected || '#007ACC';
+
+    var marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', 'bd-arrowhead');
+    marker.setAttribute('markerWidth', '10');
+    marker.setAttribute('markerHeight', '7');
+    marker.setAttribute('refX', '10');
+    marker.setAttribute('refY', '3.5');
+    marker.setAttribute('orient', 'auto');
+    marker.setAttribute('markerUnits', 'strokeWidth');
+    var arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    arrowPath.setAttribute('points', '0 0, 10 3.5, 0 7');
+    arrowPath.setAttribute('fill', edgeColor);
+    marker.appendChild(arrowPath);
+    defs.appendChild(marker);
+
+    var markerSel = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    markerSel.setAttribute('id', 'bd-arrowhead-sel');
+    markerSel.setAttribute('markerWidth', '10');
+    markerSel.setAttribute('markerHeight', '7');
+    markerSel.setAttribute('refX', '10');
+    markerSel.setAttribute('refY', '3.5');
+    markerSel.setAttribute('orient', 'auto');
+    markerSel.setAttribute('markerUnits', 'strokeWidth');
+    var arrowPathSel = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    arrowPathSel.setAttribute('points', '0 0, 10 3.5, 0 7');
+    arrowPathSel.setAttribute('fill', c.text || '#ffffff');
+    markerSel.appendChild(arrowPathSel);
+    defs.appendChild(markerSel);
+
+    svg.appendChild(defs);
+
+    bdModel.edges.forEach(function(edge, idx) {
+        var fromEl = diagramArea.querySelector('[data-block-id="' + edge.fromId + '"]');
+        var toEl = diagramArea.querySelector('[data-block-id="' + edge.toId + '"]');
+        if (!fromEl || !toEl) return;
+
+        var fromRect = fromEl.getBoundingClientRect();
+        var toRect = toEl.getBoundingClientRect();
+
+        // Convert to coordinates relative to diagramArea
+        var fromCx = fromRect.left + fromRect.width / 2 - areaRect.left;
+        var fromCy = fromRect.top + fromRect.height / 2 - areaRect.top;
+        var toCx = toRect.left + toRect.width / 2 - areaRect.left;
+        var toCy = toRect.top + toRect.height / 2 - areaRect.top;
+
+        // Determine connection points at the edges of the blocks
+        var pts = bdCalcEdgePoints(fromRect, toRect, areaRect);
+        var isEdgeSel = bdSelectedEdge === idx;
+
+        var g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.style.pointerEvents = 'auto';
+        g.style.cursor = 'pointer';
+
+        // Draw the line path
+        var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        var d = bdBuildConnectorPath(pts);
+        path.setAttribute('d', d);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', isEdgeSel ? (c.text || '#ffffff') : edgeColor);
+        path.setAttribute('stroke-width', isEdgeSel ? '2.5' : '1.5');
+        path.setAttribute('marker-end', isEdgeSel ? 'url(#bd-arrowhead-sel)' : 'url(#bd-arrowhead)');
+
+        // Apply edge style
+        if (edge.style === 'dotted' || edge.style === '-.->') {
+            path.setAttribute('stroke-dasharray', '6,3');
+        } else if (edge.style === 'thick' || edge.style === '==>') {
+            path.setAttribute('stroke-width', isEdgeSel ? '3.5' : '3');
+        }
+
+        g.appendChild(path);
+
+        // Invisible wider hit area for easier clicking
+        var hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        hitPath.setAttribute('d', d);
+        hitPath.setAttribute('fill', 'none');
+        hitPath.setAttribute('stroke', 'transparent');
+        hitPath.setAttribute('stroke-width', '14');
+        hitPath.style.cursor = 'pointer';
+        g.appendChild(hitPath);
+
+        // Edge label at midpoint
+        if (edge.label) {
+            var midX = (pts.x1 + pts.x2) / 2;
+            var midY = (pts.y1 + pts.y2) / 2;
+            if (pts.cx !== undefined) {
+                midX = pts.cx;
+                midY = pts.cy;
+            }
+
+            var labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            var labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            labelText.setAttribute('x', midX);
+            labelText.setAttribute('y', midY + 4);
+            labelText.setAttribute('text-anchor', 'middle');
+            labelText.setAttribute('font-size', '11');
+            labelText.setAttribute('font-family', "'Segoe UI',Tahoma,Geneva,Verdana,sans-serif");
+            labelText.setAttribute('fill', c.text || '#ffffff');
+            labelText.textContent = edge.label;
+
+            var tw = edge.label.length * 7 + 12;
+            labelBg.setAttribute('x', midX - tw / 2);
+            labelBg.setAttribute('y', midY - 8);
+            labelBg.setAttribute('width', tw);
+            labelBg.setAttribute('height', 18);
+            labelBg.setAttribute('rx', 3);
+            labelBg.setAttribute('fill', c.bg || '#1e1e1e');
+            labelBg.setAttribute('stroke', edgeColor);
+            labelBg.setAttribute('stroke-width', '0.5');
+
+            g.appendChild(labelBg);
+            g.appendChild(labelText);
+        }
+
+        // Click to select, double-click to edit, right-click for context menu
+        (function(edgeIdx) {
+            g.addEventListener('click', function(e) { e.stopPropagation(); bdSelectEdge(edgeIdx); });
+            g.addEventListener('dblclick', function(e) { e.stopPropagation(); bdShowEdgeDialog(edgeIdx); });
+            g.addEventListener('contextmenu', function(e) { e.preventDefault(); e.stopPropagation(); bdShowEdgeContextMenu(e, edgeIdx, c); });
+        })(idx);
+
+        svg.appendChild(g);
+    });
+
+    diagramArea.insertBefore(svg, diagramArea.firstChild);
+}
+
+function bdCalcEdgePoints(fromRect, toRect, areaRect) {
+    var fromCx = fromRect.left + fromRect.width / 2 - areaRect.left;
+    var fromCy = fromRect.top + fromRect.height / 2 - areaRect.top;
+    var toCx = toRect.left + toRect.width / 2 - areaRect.left;
+    var toCy = toRect.top + toRect.height / 2 - areaRect.top;
+
+    // Determine which sides to connect from/to
+    var dx = toCx - fromCx;
+    var dy = toCy - fromCy;
+    var x1, y1, x2, y2;
+
+    if (Math.abs(dy) > Math.abs(dx)) {
+        // Primarily vertical - connect top/bottom edges
+        if (dy > 0) {
+            x1 = fromCx; y1 = fromRect.bottom - areaRect.top;
+            x2 = toCx; y2 = toRect.top - areaRect.top;
+        } else {
+            x1 = fromCx; y1 = fromRect.top - areaRect.top;
+            x2 = toCx; y2 = toRect.bottom - areaRect.top;
+        }
+    } else {
+        // Primarily horizontal - connect left/right edges
+        if (dx > 0) {
+            x1 = fromRect.right - areaRect.left; y1 = fromCy;
+            x2 = toRect.left - areaRect.left; y2 = toCy;
+        } else {
+            x1 = fromRect.left - areaRect.left; y1 = fromCy;
+            x2 = toRect.right - areaRect.left; y2 = toCy;
+        }
+    }
+
+    return { x1: x1, y1: y1, x2: x2, y2: y2 };
+}
+
+function bdBuildConnectorPath(pts) {
+    var dx = pts.x2 - pts.x1;
+    var dy = pts.y2 - pts.y1;
+
+    // Use a smooth cubic bezier curve
+    if (Math.abs(dy) > Math.abs(dx)) {
+        // Vertical dominant - curve with vertical control points
+        var cmid = dy / 2;
+        pts.cx = (pts.x1 + pts.x2) / 2;
+        pts.cy = (pts.y1 + pts.y2) / 2;
+        return 'M' + pts.x1 + ',' + pts.y1 +
+               ' C' + pts.x1 + ',' + (pts.y1 + cmid) +
+               ' ' + pts.x2 + ',' + (pts.y2 - cmid) +
+               ' ' + pts.x2 + ',' + pts.y2;
+    } else {
+        // Horizontal dominant - curve with horizontal control points
+        var cmidX = dx / 2;
+        pts.cx = (pts.x1 + pts.x2) / 2;
+        pts.cy = (pts.y1 + pts.y2) / 2;
+        return 'M' + pts.x1 + ',' + pts.y1 +
+               ' C' + (pts.x1 + cmidX) + ',' + pts.y1 +
+               ' ' + (pts.x2 - cmidX) + ',' + pts.y2 +
+               ' ' + pts.x2 + ',' + pts.y2;
     }
 }
 
@@ -261,6 +474,7 @@ function bdRenderItem(item, index, groupId, c) {
 function bdRenderBlock(block, index, groupId, c) {
     var isSelected = bdSelectedItem && bdSelectedItem.type === 'block' && bdSelectedItem.id === block.id;
     var el = document.createElement('div');
+    el.setAttribute('data-block-id', block.id);
     el.style.cssText = 'position:relative;text-align:center;cursor:pointer;';
 
     var shape = block.shape || 'Rectangle';
@@ -373,6 +587,7 @@ function bdRenderArrowBlock(arrow, index, groupId, c) {
 function bdRenderGroup(group, index, parentGroupId, c) {
     var isSelected = bdSelectedItem && bdSelectedItem.type === 'group' && bdSelectedItem.id === group.id;
     var el = document.createElement('div');
+    el.setAttribute('data-block-id', group.id);
     el.style.cssText = 'border:2px solid ' + (isSelected ? c.selected : c.subgraphStroke) + ';border-radius:8px;padding:10px;background:' + (isSelected ? c.selectedBg : c.subgraphFill) + ';cursor:default;';
 
     var header = document.createElement('div');
@@ -539,7 +754,10 @@ function bdShowBlockDialog(block) {
         var width = parseInt(document.getElementById('bd-dlg-width').value) || 1;
         if (isNew) {
             var targetGroupId = block.__groupId || (bdSelectedItem && bdSelectedItem.groupId ? bdSelectedItem.groupId : null);
-            postMessage({ type: 'bd_blockCreated', id: id, label: label || null, shape: shape, width: width, groupId: targetGroupId });
+            var insertIndex = block.__insertBefore != null ? block.__insertBefore : (block.__insertAfter != null ? block.__insertAfter + 1 : undefined);
+            var msg = { type: 'bd_blockCreated', id: id, label: label || null, shape: shape, width: width, groupId: targetGroupId };
+            if (insertIndex != null) msg.index = insertIndex;
+            postMessage(msg);
         } else {
             postMessage({ type: 'bd_blockEdited', id: block.id, newId: id !== block.id ? id : undefined, label: label || null, shape: shape, width: width });
         }
