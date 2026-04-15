@@ -255,9 +255,10 @@ function bdRenderConnectorLines(diagramArea, c) {
     svg.setAttribute('height', areaRect.height);
     svg.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:1;overflow:visible;';
 
-    // Define arrowhead marker
+    // Define arrowhead markers
     var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    var edgeColor = c.selected || '#007ACC';
+    var lineColor = c.mutedText || c.border || '#6A6A6A'; // normal/unselected color
+    var selColor = c.selected || '#007ACC'; // selected/highlight color
 
     var marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
     marker.setAttribute('id', 'bd-arrowhead');
@@ -269,7 +270,7 @@ function bdRenderConnectorLines(diagramArea, c) {
     marker.setAttribute('markerUnits', 'strokeWidth');
     var arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     arrowPath.setAttribute('points', '0 0, 10 3.5, 0 7');
-    arrowPath.setAttribute('fill', edgeColor);
+    arrowPath.setAttribute('fill', lineColor);
     marker.appendChild(arrowPath);
     defs.appendChild(marker);
 
@@ -283,7 +284,7 @@ function bdRenderConnectorLines(diagramArea, c) {
     markerSel.setAttribute('markerUnits', 'strokeWidth');
     var arrowPathSel = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     arrowPathSel.setAttribute('points', '0 0, 10 3.5, 0 7');
-    arrowPathSel.setAttribute('fill', c.text || '#ffffff');
+    arrowPathSel.setAttribute('fill', selColor);
     markerSel.appendChild(arrowPathSel);
     defs.appendChild(markerSel);
 
@@ -311,7 +312,7 @@ function bdRenderConnectorLines(diagramArea, c) {
         path.setAttribute('y1', pts.y1);
         path.setAttribute('x2', pts.x2);
         path.setAttribute('y2', pts.y2);
-        path.setAttribute('stroke', isEdgeSel ? (c.text || '#ffffff') : edgeColor);
+        path.setAttribute('stroke', isEdgeSel ? selColor : lineColor);
         path.setAttribute('stroke-width', isEdgeSel ? '2.5' : '1.5');
 
         // Only show arrowhead for arrow style (-->), not for line style (---)
@@ -362,7 +363,7 @@ function bdRenderConnectorLines(diagramArea, c) {
             labelBg.setAttribute('height', 18);
             labelBg.setAttribute('rx', 3);
             labelBg.setAttribute('fill', c.bg || '#1e1e1e');
-            labelBg.setAttribute('stroke', edgeColor);
+            labelBg.setAttribute('stroke', lineColor);
             labelBg.setAttribute('stroke-width', '0.5');
 
             g.appendChild(labelBg);
