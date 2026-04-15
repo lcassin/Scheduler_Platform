@@ -281,6 +281,10 @@ public partial class VisualEditorBridge
                 PushUndo();
                 targetList.RemoveAt(index);
             }
+            else
+            {
+                return;
+            }
         }
         else
         {
@@ -307,11 +311,11 @@ public partial class VisualEditorBridge
         var toGroupId = root.TryGetProperty("toGroupId", out var gProp) ? gProp.GetString() : null;
         var toIndex = root.TryGetProperty("toIndex", out var iProp) ? iProp.GetInt32() : -1;
 
-        PushUndo();
-
         // Remove from current location
         var item = FindAndRemoveItemById(id, _blockDiagramModel.Items);
         if (item == null) return;
+
+        PushUndo();
 
         // Insert at new location
         var targetList = FindItemList(toGroupId);
