@@ -133,17 +133,17 @@
         container.innerHTML = '';
 
         const c = bdColors();
+
+        // Set container background to match theme
+        container.style.background = c.bg;
+
         const wrapper = document.createElement('div');
         wrapper.id = 'bd-wrapper';
-        wrapper.style.cssText = `padding:20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:${c.text};min-height:100%;`;
+        wrapper.style.cssText = `padding:20px;padding-top:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:${c.text};min-height:100%;background:${c.bg};`;
 
-        // Toolbar
-        wrapper.appendChild(renderToolbar(c));
-
-        // Diagram area
+        // Diagram area (rendered before toolbar so toolbar appears at bottom)
         const diagramArea = document.createElement('div');
         diagramArea.id = 'bd-diagram';
-        diagramArea.style.cssText = `margin-top:12px;`;
 
         // Render top-level grid
         diagramArea.appendChild(renderItemsGrid(bdModel.items || [], bdModel.columns || 1, null, c));
@@ -174,6 +174,9 @@
         }
 
         wrapper.appendChild(diagramArea);
+
+        // Toolbar at bottom (below diagram content, avoids overlap with WPF toolbar at top)
+        wrapper.appendChild(renderToolbar(c));
 
         // Click on empty space deselects
         wrapper.addEventListener('click', () => { bdSelectedItem = null; bdSelectedEdge = null; renderBlockDiagram(); });
@@ -296,7 +299,13 @@
         const arrowEl = document.createElement('div');
         arrowEl.style.cssText = `display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:6px;border:1.5px solid ${isSelected ? c.selected : c.arrowBg};background:${isSelected ? c.selectedBg : c.arrowBg};color:${c.arrowText};font-size:18px;`;
         arrowEl.innerHTML = `<span style="font-size:22px">${symbol}</span>`;
-        if (arrow.label) arrowEl.innerHTML += `<span style="font-size:12px">${esc(arrow.label)}</span>`;
+        if (arrow.label) {
+            // Decode HTML entities (e.g. &nbsp;) for display
+            const labelSpan = document.createElement('span');
+            labelSpan.style.cssText = 'font-size:12px';
+            labelSpan.innerHTML = arrow.label;
+            arrowEl.appendChild(labelSpan);
+        }
         el.appendChild(arrowEl);
 
         const idBadge = document.createElement('div');
