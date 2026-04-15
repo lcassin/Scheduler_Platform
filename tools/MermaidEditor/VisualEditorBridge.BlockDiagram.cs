@@ -263,9 +263,23 @@ public partial class VisualEditorBridge
 
         PushUndo();
 
-        RemoveItemById(id, _blockDiagramModel.Items);
-        // Also remove any edges referencing this block
-        _blockDiagramModel.Edges.RemoveAll(e => e.FromId == id || e.ToId == id);
+        // Space elements have no ID — JS sends "__space__" sentinel with groupId + index
+        if (id == "__space__")
+        {
+            var groupId = root.TryGetProperty("groupId", out var gProp) ? gProp.GetString() : null;
+            var index = root.TryGetProperty("index", out var iProp) ? iProp.GetInt32() : -1;
+            var targetList = FindItemList(groupId);
+            if (index >= 0 && index < targetList.Count && targetList[index] is BlockDiagramSpace)
+            {
+                targetList.RemoveAt(index);
+            }
+        }
+        else
+        {
+            RemoveItemById(id, _blockDiagramModel.Items);
+            // Also remove any edges referencing this block
+            _blockDiagramModel.Edges.RemoveAll(e => e.FromId == id || e.ToId == id);
+        }
 
         RaiseBlockDiagramModelChanged("bd_blockDeleted");
     }
