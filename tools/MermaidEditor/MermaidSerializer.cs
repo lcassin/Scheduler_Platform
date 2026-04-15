@@ -2176,30 +2176,90 @@ public static class MermaidSerializer
         // Write the zenuml declaration
         sb.AppendLine("zenuml");
 
-        // Write title
-        if (!string.IsNullOrEmpty(model.Title))
+        // Write declaration block: use raw lines if available (preserves groups, colors, @Starter, etc.)
+        if (model.RawDeclarationLines.Count > 0)
         {
-            sb.AppendLine($"{Indent}title {model.Title}");
-        }
-
-        // Write explicit participant declarations
-        foreach (var participant in model.Participants.Where(p => p.IsExplicit))
-        {
-            if (participant.Annotator != ZenUMLAnnotator.None)
+            // Build a map of participant annotator changes to patch raw lines
+            var annotatorChanges = new Dictionary<string, ZenUMLAnnotator>();
+            foreach (var p in model.Participants.Where(p => p.IsExplicit && p.OriginalDeclarationLine != null))
             {
-                sb.AppendLine($"{Indent}@{participant.Annotator} {participant.Id}");
-                if (!string.IsNullOrEmpty(participant.Alias))
+                // Check if the annotator was changed from the original line
+                var origLine = p.OriginalDeclarationLine!.TrimStart();
+                if (origLine.StartsWith("@"))
+                {
+                    var spaceIdx = origLine.IndexOf(' ');
+                    if (spaceIdx > 0)
+                    {
+                        var origAnnotator = origLine.Substring(1, spaceIdx - 1).ToLowerInvariant();
+                        var currentAnnotator = p.Annotator.ToString().ToLowerInvariant();
+                        if (origAnnotator != currentAnnotator && p.Annotator != ZenUMLAnnotator.None)
+                        {
+                            annotatorChanges[p.Id] = p.Annotator;
+                        }
+                    }
+                }
+            }
+
+            // Output raw declaration lines, patching any changed annotators
+            foreach (var rawLine in model.RawDeclarationLines)
+            {
+                var patched = false;
+                var trimmedRaw = rawLine.Trim();
+                if (trimmedRaw.StartsWith("@") && annotatorChanges.Count > 0)
+                {
+                    // Check if this line declares a participant whose annotator changed
+                    foreach (var change in annotatorChanges)
+                    {
+                        // Match lines like "@Entity Database #FFF0B3" or "@Actor Customer"
+                        if (trimmedRaw.Contains(change.Key))
+                        {
+                            var spaceIdx = trimmedRaw.IndexOf(' ');
+                            if (spaceIdx > 0)
+                            {
+                                // Get the leading whitespace from the original line
+                                var leadingWhitespace = rawLine.Substring(0, rawLine.Length - rawLine.TrimStart().Length);
+                                // Replace the annotator name, keep everything after the first space
+                                var rest = trimmedRaw.Substring(spaceIdx);
+                                sb.AppendLine($"{leadingWhitespace}@{change.Value}{rest}");
+                                patched = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (!patched)
+                {
+                    sb.AppendLine(rawLine);
+                }
+            }
+            sb.AppendLine();
+        }
+        else
+        {
+            // Fallback: reconstruct from model (no raw lines available)
+            if (!string.IsNullOrEmpty(model.Title))
+            {
+                sb.AppendLine($"{Indent}title {model.Title}");
+            }
+
+            foreach (var participant in model.Participants.Where(p => p.IsExplicit))
+            {
+                if (participant.Annotator != ZenUMLAnnotator.None)
+                {
+                    sb.AppendLine($"{Indent}@{participant.Annotator} {participant.Id}");
+                    if (!string.IsNullOrEmpty(participant.Alias))
+                    {
+                        sb.AppendLine($"{Indent}{participant.Id} as {participant.Alias}");
+                    }
+                }
+                else if (!string.IsNullOrEmpty(participant.Alias))
                 {
                     sb.AppendLine($"{Indent}{participant.Id} as {participant.Alias}");
                 }
-            }
-            else if (!string.IsNullOrEmpty(participant.Alias))
-            {
-                sb.AppendLine($"{Indent}{participant.Id} as {participant.Alias}");
-            }
-            else
-            {
-                sb.AppendLine($"{Indent}{participant.Id}");
+                else
+                {
+                    sb.AppendLine($"{Indent}{participant.Id}");
+                }
             }
         }
 

@@ -249,8 +249,35 @@ public partial class VisualEditorBridge
         if (root.TryGetProperty("annotator", out var annProp))
         {
             var annStr = annProp.GetString() ?? "None";
-            participant.Annotator = Enum.TryParse<ZenUMLAnnotator>(annStr, true, out var parsed)
+            var newAnnotator = Enum.TryParse<ZenUMLAnnotator>(annStr, true, out var parsed)
                 ? parsed : ZenUMLAnnotator.None;
+
+            // If annotator changed, update the raw declaration lines to preserve formatting
+            if (newAnnotator != participant.Annotator && participant.OriginalDeclarationLine != null
+                && _zenUMLModel.RawDeclarationLines.Count > 0)
+            {
+                var origTrimmed = participant.OriginalDeclarationLine.Trim();
+                for (int i = 0; i < _zenUMLModel.RawDeclarationLines.Count; i++)
+                {
+                    if (_zenUMLModel.RawDeclarationLines[i].Trim() == origTrimmed)
+                    {
+                        // Patch the raw line: replace the annotator keyword, keep everything else
+                        var rawLine = _zenUMLModel.RawDeclarationLines[i];
+                        var leadingWs = rawLine.Substring(0, rawLine.Length - rawLine.TrimStart().Length);
+                        var spaceIdx = origTrimmed.IndexOf(' ');
+                        if (spaceIdx > 0)
+                        {
+                            var rest = origTrimmed.Substring(spaceIdx);
+                            var newLine = $"{leadingWs}@{newAnnotator}{rest}";
+                            _zenUMLModel.RawDeclarationLines[i] = newLine;
+                            participant.OriginalDeclarationLine = newLine.Trim();
+                        }
+                        break;
+                    }
+                }
+            }
+
+            participant.Annotator = newAnnotator;
         }
 
         RaiseZenUMLModelChanged("zu_participantEdited");

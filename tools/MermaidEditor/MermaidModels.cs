@@ -2136,6 +2136,13 @@ public class ZenUMLModel
     /// The line index of the zenuml declaration.
     /// </summary>
     public int DeclarationLineIndex { get; set; }
+
+    /// <summary>
+    /// Raw participant declaration lines from the original source.
+    /// These include @Actor, @Database, group, @Starter, colors, etc.
+    /// Preserved for round-trip fidelity when re-serializing.
+    /// </summary>
+    public List<string> RawDeclarationLines { get; set; } = new();
 }
 
 /// <summary>
@@ -2162,6 +2169,12 @@ public class ZenUMLParticipant
     /// Whether this participant was explicitly declared.
     /// </summary>
     public bool IsExplicit { get; set; }
+
+    /// <summary>
+    /// The original declaration line from the source code.
+    /// Used to preserve advanced formatting (colors, groups, @Starter, etc.) during re-serialization.
+    /// </summary>
+    public string? OriginalDeclarationLine { get; set; }
 
     /// <summary>
     /// Returns the effective display label.

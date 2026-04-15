@@ -3472,7 +3472,16 @@ public static class MermaidParser
         @"^\s*title\s+(.+)$", RegexOptions.Compiled);
 
     private static readonly Regex ZenUMLAnnotatorPattern = new(
-        @"^\s*@(Actor|Boundary|Control|Entity|Database)\s+(\S+)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        @"^\s*@(Actor|Boundary|Control|Entity|Database)\s+(\S+)(\s+#[A-Fa-f0-9]{3,8})?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Extended annotator declarations (e.g., @Lambda, @EC2 <<stereotype>> Name, @AzureFunction, @Starter)
+    // These are ZenUML features not captured in the basic model, preserved as raw lines.
+    private static readonly Regex ZenUMLExtendedAnnotatorPattern = new(
+        @"^\s*@(Starter|Lambda|EC2|AzureFunction)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Group declaration: group Name { ... }
+    private static readonly Regex ZenUMLGroupStartPattern = new(
+        @"^\s*group\s+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex ZenUMLAliasPattern = new(
         @"^\s*(\S+)\s+as\s+(.+)$", RegexOptions.Compiled);
@@ -3605,15 +3614,102 @@ public static class MermaidParser
     /// </summary>
     private static void ParseZenUMLBody(List<string> lines, ZenUMLModel model, HashSet<string> knownParticipants)
     {
+        // First pass: identify and store raw declaration lines (everything before first interaction)
+        // Declaration lines include: title, @Annotator, aliases, group blocks, @Starter, @Lambda, @EC2,
+        // @AzureFunction, plain participant names, empty lines, and comments.
+        // Interaction lines include: messages (A->B, A.method()), fragments (if, while, par, etc.),
+        // return statements, creation (new A), and variable assignments.
+        int declEnd = 0;
+        int braceDepth = 0;
+        for (int i = 0; i < lines.Count; i++)
+        {
+            var trimmed = lines[i].Trim();
+
+            // Track brace depth for group blocks
+            if (braceDepth > 0)
+            {
+                if (trimmed == "}" || trimmed.EndsWith("}"))
+                    braceDepth--;
+                if (trimmed.Contains("{"))
+                    braceDepth++;
+                declEnd = i + 1;
+                continue;
+            }
+
+            // Empty lines and comments are part of the declaration block
+            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("//") || trimmed.StartsWith("%%"))
+            {
+                declEnd = i + 1;
+                continue;
+            }
+
+            // Title line
+            if (ZenUMLTitlePattern.IsMatch(trimmed))
+            {
+                declEnd = i + 1;
+                continue;
+            }
+
+            // Standard annotator: @Actor, @Boundary, @Control, @Entity, @Database (with optional color)
+            if (ZenUMLAnnotatorPattern.IsMatch(trimmed))
+            {
+                declEnd = i + 1;
+                continue;
+            }
+
+            // Extended annotator: @Starter, @Lambda, @EC2, @AzureFunction
+            if (ZenUMLExtendedAnnotatorPattern.IsMatch(trimmed))
+            {
+                declEnd = i + 1;
+                continue;
+            }
+
+            // Group start: group Name { ... }
+            if (ZenUMLGroupStartPattern.IsMatch(trimmed))
+            {
+                if (trimmed.Contains("{"))
+                    braceDepth++;
+                if (trimmed.Contains("}"))
+                    braceDepth--;
+                declEnd = i + 1;
+                continue;
+            }
+
+            // Alias: A as Alice
+            if (ZenUMLAliasPattern.IsMatch(trimmed))
+            {
+                declEnd = i + 1;
+                continue;
+            }
+
+            // Plain participant name (must not be a keyword or contain dots/arrows)
+            if (ZenUMLPlainParticipantPattern.IsMatch(trimmed) && !IsZenUMLKeyword(trimmed))
+            {
+                declEnd = i + 1;
+                continue;
+            }
+
+            // This line is an interaction line - stop here
+            break;
+        }
+
+        // Store raw declaration lines (trim trailing empty lines)
+        int rawEnd = declEnd;
+        while (rawEnd > 0 && string.IsNullOrWhiteSpace(lines[rawEnd - 1]))
+            rawEnd--;
+        for (int i = 0; i < rawEnd; i++)
+            model.RawDeclarationLines.Add(lines[i]);
+
+        // Parse all body lines (declarations + interactions) for model population
         int idx = 0;
-        ParseZenUMLElements(lines, ref idx, model.Elements, model, knownParticipants, false);
+        ParseZenUMLElements(lines, ref idx, model.Elements, model, knownParticipants, false, null);
     }
 
     /// <summary>
     /// Recursively parses ZenUML elements from lines, handling nested blocks.
     /// </summary>
     private static void ParseZenUMLElements(List<string> lines, ref int idx, List<ZenUMLElement> elements,
-        ZenUMLModel model, HashSet<string> knownParticipants, bool insideBlock)
+        ZenUMLModel model, HashSet<string> knownParticipants, bool insideBlock, string? contextParticipantId)
     {
         while (idx < lines.Count)
         {
@@ -3692,7 +3788,8 @@ public static class MermaidParser
                     _ => ZenUMLAnnotator.None
                 };
                 var id = annotatorMatch.Groups[2].Value;
-                EnsureZenUMLParticipant(model, knownParticipants, id, annotator: annotator, isExplicit: true);
+                EnsureZenUMLParticipant(model, knownParticipants, id, annotator: annotator, isExplicit: true,
+                    originalLine: trimmed);
                 idx++;
                 continue;
             }
@@ -3726,7 +3823,7 @@ public static class MermaidParser
                 idx++;
 
                 // Parse the if body
-                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true);
+                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true, contextParticipantId);
 
                 // Check for else if / else continuations
                 while (idx < lines.Count)
@@ -3743,7 +3840,7 @@ public static class MermaidParser
                         };
                         fragment.Sections.Add(elseIfSection);
                         idx++;
-                        ParseZenUMLElements(lines, ref idx, elseIfSection.Elements, model, knownParticipants, true);
+                        ParseZenUMLElements(lines, ref idx, elseIfSection.Elements, model, knownParticipants, true, contextParticipantId);
                         continue;
                     }
 
@@ -3757,7 +3854,7 @@ public static class MermaidParser
                         };
                         fragment.Sections.Add(elseSection);
                         idx++;
-                        ParseZenUMLElements(lines, ref idx, elseSection.Elements, model, knownParticipants, true);
+                        ParseZenUMLElements(lines, ref idx, elseSection.Elements, model, knownParticipants, true, contextParticipantId);
                         continue;
                     }
 
@@ -3793,7 +3890,7 @@ public static class MermaidParser
                 };
                 fragment.Sections.Add(section);
                 idx++;
-                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true);
+                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true, contextParticipantId);
                 elements.Add(fragment);
                 continue;
             }
@@ -3809,7 +3906,7 @@ public static class MermaidParser
                 var section = new ZenUMLFragmentSection { Keyword = "opt" };
                 fragment.Sections.Add(section);
                 idx++;
-                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true);
+                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true, contextParticipantId);
                 elements.Add(fragment);
                 continue;
             }
@@ -3825,7 +3922,7 @@ public static class MermaidParser
                 var section = new ZenUMLFragmentSection { Keyword = "par" };
                 fragment.Sections.Add(section);
                 idx++;
-                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true);
+                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true, contextParticipantId);
                 elements.Add(fragment);
                 continue;
             }
@@ -3841,7 +3938,7 @@ public static class MermaidParser
                 var section = new ZenUMLFragmentSection { Keyword = "try" };
                 fragment.Sections.Add(section);
                 idx++;
-                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true);
+                ParseZenUMLElements(lines, ref idx, section.Elements, model, knownParticipants, true, contextParticipantId);
 
                 // Check for catch/finally
                 while (idx < lines.Count)
@@ -3853,7 +3950,7 @@ public static class MermaidParser
                         var catchSection = new ZenUMLFragmentSection { Keyword = "catch" };
                         fragment.Sections.Add(catchSection);
                         idx++;
-                        ParseZenUMLElements(lines, ref idx, catchSection.Elements, model, knownParticipants, true);
+                        ParseZenUMLElements(lines, ref idx, catchSection.Elements, model, knownParticipants, true, contextParticipantId);
                         continue;
                     }
 
@@ -3862,7 +3959,7 @@ public static class MermaidParser
                         var finallySection = new ZenUMLFragmentSection { Keyword = "finally" };
                         fragment.Sections.Add(finallySection);
                         idx++;
-                        ParseZenUMLElements(lines, ref idx, finallySection.Elements, model, knownParticipants, true);
+                        ParseZenUMLElements(lines, ref idx, finallySection.Elements, model, knownParticipants, true, contextParticipantId);
                         continue;
                     }
 
@@ -3899,7 +3996,7 @@ public static class MermaidParser
                 if (hasBlock)
                 {
                     idx++;
-                    ParseZenUMLElements(lines, ref idx, msg.NestedElements, model, knownParticipants, true);
+                    ParseZenUMLElements(lines, ref idx, msg.NestedElements, model, knownParticipants, true, targetId);
                 }
                 else
                 {
@@ -3930,7 +4027,7 @@ public static class MermaidParser
                 if (hasBlock)
                 {
                     idx++;
-                    ParseZenUMLElements(lines, ref idx, msg.NestedElements, model, knownParticipants, true);
+                    ParseZenUMLElements(lines, ref idx, msg.NestedElements, model, knownParticipants, true, targetId);
                 }
                 else
                 {
@@ -3982,7 +4079,7 @@ public static class MermaidParser
                 if (hasBlock)
                 {
                     idx++;
-                    ParseZenUMLElements(lines, ref idx, msg.NestedElements, model, knownParticipants, true);
+                    ParseZenUMLElements(lines, ref idx, msg.NestedElements, model, knownParticipants, true, toId);
                 }
                 else
                 {
@@ -3993,6 +4090,9 @@ public static class MermaidParser
             }
 
             // Self call: A.method()
+            // If there is a contextParticipantId (we're inside a message block),
+            // and targetId differs from context, this is actually a cross-participant
+            // Sync call FROM the context participant TO the target.
             var selfCallMatch = ZenUMLSelfCallPattern.Match(trimmed);
             if (selfCallMatch.Success)
             {
@@ -4001,18 +4101,21 @@ public static class MermaidParser
                 var paramsStr = selfCallMatch.Groups[3].Success ? selfCallMatch.Groups[3].Value : "()";
                 var hasBlock = selfCallMatch.Groups[4].Success && selfCallMatch.Groups[4].Value == "{";
                 EnsureZenUMLParticipant(model, knownParticipants, targetId);
+
+                // Determine if this is a true self-call or a cross-participant call
+                var isCrossCall = !string.IsNullOrEmpty(contextParticipantId) && contextParticipantId != targetId;
                 var msg = new ZenUMLMessage
                 {
-                    FromId = targetId,
+                    FromId = isCrossCall ? contextParticipantId : targetId,
                     ToId = targetId,
                     Text = methodName + paramsStr,
-                    MessageType = ZenUMLMessageType.SelfCall,
+                    MessageType = isCrossCall ? ZenUMLMessageType.Sync : ZenUMLMessageType.SelfCall,
                     HasBlock = hasBlock
                 };
                 if (hasBlock)
                 {
                     idx++;
-                    ParseZenUMLElements(lines, ref idx, msg.NestedElements, model, knownParticipants, true);
+                    ParseZenUMLElements(lines, ref idx, msg.NestedElements, model, knownParticipants, true, targetId);
                 }
                 else
                 {
@@ -4045,7 +4148,8 @@ public static class MermaidParser
     /// Ensures a ZenUML participant exists in the model.
     /// </summary>
     private static void EnsureZenUMLParticipant(ZenUMLModel model, HashSet<string> known, string id,
-        string? alias = null, ZenUMLAnnotator annotator = ZenUMLAnnotator.None, bool isExplicit = false)
+        string? alias = null, ZenUMLAnnotator annotator = ZenUMLAnnotator.None, bool isExplicit = false,
+        string? originalLine = null)
     {
         if (string.IsNullOrEmpty(id)) return;
 
@@ -4056,7 +4160,8 @@ public static class MermaidParser
                 Id = id,
                 Alias = alias,
                 Annotator = annotator,
-                IsExplicit = isExplicit
+                IsExplicit = isExplicit,
+                OriginalDeclarationLine = originalLine
             });
         }
         else if (isExplicit)
@@ -4068,6 +4173,7 @@ public static class MermaidParser
                 existing.IsExplicit = true;
                 if (alias != null) existing.Alias = alias;
                 if (annotator != ZenUMLAnnotator.None) existing.Annotator = annotator;
+                if (originalLine != null) existing.OriginalDeclarationLine = originalLine;
             }
         }
     }
