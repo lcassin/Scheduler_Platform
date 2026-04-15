@@ -291,8 +291,8 @@ function bdRenderConnectorLines(diagramArea, c) {
     svg.appendChild(defs);
 
     bdModel.edges.forEach(function(edge, idx) {
-        var fromEl = diagramArea.querySelector('[data-block-id="' + edge.fromId + '"]');
-        var toEl = diagramArea.querySelector('[data-block-id="' + edge.toId + '"]');
+        var fromEl = diagramArea.querySelector('[data-block-id="' + CSS.escape(edge.fromId) + '"]');
+        var toEl = diagramArea.querySelector('[data-block-id="' + CSS.escape(edge.toId) + '"]');
         if (!fromEl || !toEl) return;
 
         var fromRect = fromEl.getBoundingClientRect();
@@ -519,6 +519,7 @@ function bdRenderSpace(space, index, groupId, c) {
 function bdRenderArrowBlock(arrow, index, groupId, c) {
     var isSelected = bdSelectedItem && bdSelectedItem.type === 'arrow' && bdSelectedItem.id === arrow.id;
     var el = document.createElement('div');
+    el.setAttribute('data-block-id', arrow.id);
     el.style.cssText = 'text-align:center;cursor:pointer;padding:6px;';
 
     var dirSymbols = { down: '\u25BC', up: '\u25B2', left: '\u25C4', right: '\u25BA', x: '\u2715', y: '\u2715' };
@@ -799,7 +800,10 @@ function bdShowArrowDialog(arrow) {
         var width = parseInt(document.getElementById('bd-dlg-width').value) || 1;
         if (isNew) {
             var targetGroupId = arrow.__groupId || (bdSelectedItem && bdSelectedItem.groupId ? bdSelectedItem.groupId : null);
-            postMessage({ type: 'bd_arrowCreated', id: id, label: label || null, direction: direction, width: width, groupId: targetGroupId });
+            var insertIndex = arrow.__insertBefore != null ? arrow.__insertBefore : (arrow.__insertAfter != null ? arrow.__insertAfter + 1 : undefined);
+            var msg = { type: 'bd_arrowCreated', id: id, label: label || null, direction: direction, width: width, groupId: targetGroupId };
+            if (insertIndex != null) msg.index = insertIndex;
+            postMessage(msg);
         } else {
             postMessage({ type: 'bd_blockEdited', id: arrow.id, newId: id !== arrow.id ? id : undefined, label: label || null, direction: direction, width: width });
         }
@@ -1111,6 +1115,8 @@ function bdShowBlockContextMenu(e, block, index, groupId, c) {
     items.push({ sep: true });
     items.push({ label: 'Add Block Before', action: function() { bdShowBlockDialog({ __insertBefore: index, __groupId: groupId }); } });
     items.push({ label: 'Add Block After', action: function() { bdShowBlockDialog({ __insertAfter: index, __groupId: groupId }); } });
+    items.push({ label: 'Add Space Before', action: function() { postMessage({ type: 'bd_spaceCreated', width: 1, groupId: groupId, index: index }); } });
+    items.push({ label: 'Add Space After', action: function() { postMessage({ type: 'bd_spaceCreated', width: 1, groupId: groupId, index: index + 1 }); } });
     items.push({ label: 'Add Connection From...', action: function() { bdShowEdgeDialogFrom(block.id); } });
     items.push({ sep: true });
     items.push({ label: 'Copy', action: function() { bdCopyItem(block); } });
@@ -1126,6 +1132,11 @@ function bdShowArrowContextMenu(e, arrow, index, groupId, c) {
     ];
     if (index > 0) items.push({ label: '\u2191 Move Up', action: function() { postMessage({ type: 'bd_blockMoved', id: arrow.id, toGroupId: groupId, toIndex: index - 1 }); } });
     if (index < listLen - 1) items.push({ label: '\u2193 Move Down', action: function() { postMessage({ type: 'bd_blockMoved', id: arrow.id, toGroupId: groupId, toIndex: index + 1 }); } });
+    items.push({ sep: true });
+    items.push({ label: 'Add Block Before', action: function() { bdShowBlockDialog({ __insertBefore: index, __groupId: groupId }); } });
+    items.push({ label: 'Add Block After', action: function() { bdShowBlockDialog({ __insertAfter: index, __groupId: groupId }); } });
+    items.push({ label: 'Add Space Before', action: function() { postMessage({ type: 'bd_spaceCreated', width: 1, groupId: groupId, index: index }); } });
+    items.push({ label: 'Add Space After', action: function() { postMessage({ type: 'bd_spaceCreated', width: 1, groupId: groupId, index: index + 1 }); } });
     items.push({ sep: true });
     items.push({ label: 'Copy', action: function() { bdCopyItem(arrow); } });
     items.push({ label: 'Delete', action: function() { postMessage({ type: 'bd_blockDeleted', id: arrow.id }); }, danger: true });
@@ -1150,12 +1161,19 @@ function bdShowGroupContextMenu(e, group, index, parentGroupId, c) {
 }
 
 function bdShowSpaceContextMenu(e, index, groupId, c) {
-    bdShowContextMenu(e, [
+    var items = [
         { label: 'Set Width...', action: function() { bdShowSpaceWidthDialog(index, groupId); } },
+        { sep: true },
+        { label: 'Add Block Before', action: function() { bdShowBlockDialog({ __insertBefore: index, __groupId: groupId }); } },
+        { label: 'Add Block After', action: function() { bdShowBlockDialog({ __insertAfter: index, __groupId: groupId }); } },
+        { label: 'Add Space Before', action: function() { postMessage({ type: 'bd_spaceCreated', width: 1, groupId: groupId, index: index }); } },
+        { label: 'Add Space After', action: function() { postMessage({ type: 'bd_spaceCreated', width: 1, groupId: groupId, index: index + 1 }); } },
+        { sep: true },
         { label: 'Delete', action: function() {
             postMessage({ type: 'bd_blockDeleted', id: '__space__', groupId: groupId, index: index });
         }, danger: true }
-    ], c);
+    ];
+    bdShowContextMenu(e, items, c);
 }
 
 function bdShowEdgeContextMenu(e, edgeIndex, c) {
