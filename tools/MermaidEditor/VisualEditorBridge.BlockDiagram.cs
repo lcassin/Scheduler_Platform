@@ -270,8 +270,6 @@ public partial class VisualEditorBridge
         var id = root.GetProperty("id").GetString();
         if (id == null) return;
 
-        PushUndo();
-
         // Space elements have no ID — JS sends "__space__" sentinel with groupId + index
         if (id == "__space__")
         {
@@ -280,11 +278,17 @@ public partial class VisualEditorBridge
             var targetList = FindItemList(groupId);
             if (index >= 0 && index < targetList.Count && targetList[index] is BlockDiagramSpace)
             {
+                PushUndo();
                 targetList.RemoveAt(index);
             }
         }
         else
         {
+            // Validate item exists before pushing undo
+            var existing = FindBlockByIdRecursive(id, _blockDiagramModel.Items);
+            if (existing == null) return;
+
+            PushUndo();
             RemoveItemById(id, _blockDiagramModel.Items);
             // Also remove any edges referencing this block
             _blockDiagramModel.Edges.RemoveAll(e => e.FromId == id || e.ToId == id);
