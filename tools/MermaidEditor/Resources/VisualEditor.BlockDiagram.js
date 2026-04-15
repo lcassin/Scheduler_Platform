@@ -699,18 +699,24 @@
         const idOptions = blockIds.map(id => ({ value: id, label: id }));
         const styleOptions = [{ value: '-->', label: '--> (arrow)' }, { value: '---', label: '--- (line)' }];
 
+        // Mermaid block-beta only supports labeled edges with --> style (A -- "text" --> B).
+        // There is no A -- "text" --- B variant, so force --> when a label is present.
+        const effectiveStyle = edge.label ? '-->' : (edge.style || '-->');
+
         showDialog(isNew ? 'Add Connection' : 'Edit Connection', [
             { key: 'fromId', label: 'From Block', type: 'select', value: edge.fromId || '', options: idOptions },
             { key: 'toId', label: 'To Block', type: 'select', value: edge.toId || '', options: idOptions },
             { key: 'label', label: 'Label (optional)', value: edge.label || '', placeholder: 'Connection label' },
-            { key: 'style', label: 'Style', type: 'select', value: edge.style || '-->', options: styleOptions }
+            { key: 'style', label: 'Style', type: 'select', value: effectiveStyle, options: styleOptions }
         ], (values) => {
+            // Force --> when label is present (block-beta syntax limitation)
+            const finalStyle = values.label ? '-->' : values.style;
             if (isNew) {
                 postMessage('bd_edgeCreated', {
                     fromId: values.fromId,
                     toId: values.toId,
                     label: values.label || null,
-                    style: values.style
+                    style: finalStyle
                 });
             } else {
                 postMessage('bd_edgeEdited', {
@@ -718,7 +724,7 @@
                     fromId: values.fromId,
                     toId: values.toId,
                     label: values.label || null,
-                    style: values.style
+                    style: finalStyle
                 });
             }
         }, c, isNew ? null : () => {
