@@ -2768,8 +2768,8 @@
 
         function _applyEditorCanvasZoom(newZoom) {
             const svgEl = _getEditorCanvasSvg();
-            // Block Diagram uses DOM divs instead of SVG - target the bd-wrapper
-            const zoomTarget = svgEl || (document.getElementById('bd-wrapper'));
+            // Block Diagram uses DOM divs instead of SVG - prefer bd-wrapper over inner block-shape SVGs
+            const zoomTarget = document.getElementById('bd-wrapper') || svgEl;
             if (!zoomTarget) return;
             editorCanvasZoom = Math.max(0.2, Math.min(5, newZoom));
             zoomTarget.style.transformOrigin = 'top left';
@@ -2789,8 +2789,8 @@
         function _editorCanvasFitToView() {
             const svgEl = _getEditorCanvasSvg();
             const ec = document.getElementById('editorCanvas');
-            // Block Diagram uses DOM divs - target bd-wrapper for fit
-            const fitTarget = svgEl || document.getElementById('bd-wrapper');
+            // Block Diagram uses DOM divs - prefer bd-wrapper over inner block-shape SVGs
+            const fitTarget = document.getElementById('bd-wrapper') || svgEl;
             if (!fitTarget || !ec) return;
             // Get the natural (unscaled) size
             const naturalW = fitTarget.tagName === 'svg' ? (parseFloat(fitTarget.getAttribute('width')) || fitTarget.getBBox().width || 800) : (fitTarget.scrollWidth || 800);

@@ -170,7 +170,7 @@ function renderBlockDiagram() {
 
             var fromSpan = document.createElement('span');
             fromSpan.style.fontWeight = '600';
-            fromSpan.textContent = edge.fromId;
+            fromSpan.textContent = bdGetDisplayLabel(edge.fromId);
             edgeEl.appendChild(fromSpan);
 
             var styleSpan = document.createElement('span');
@@ -181,14 +181,13 @@ function renderBlockDiagram() {
             if (edge.label) {
                 var labelSpan = document.createElement('span');
                 labelSpan.style.cssText = 'font-style:italic;color:' + c.mutedText;
-                // Use textContent to prevent XSS
                 labelSpan.textContent = '"' + edge.label + '"';
                 edgeEl.appendChild(labelSpan);
             }
 
             var toSpan = document.createElement('span');
             toSpan.style.fontWeight = '600';
-            toSpan.textContent = edge.toId;
+            toSpan.textContent = bdGetDisplayLabel(edge.toId);
             edgeEl.appendChild(toSpan);
 
             edgeEl.addEventListener('click', function(e) { e.stopPropagation(); bdSelectEdge(idx); });
@@ -466,6 +465,13 @@ function bdCollectIds(items, ids) {
     }
 }
 
+// Returns display label for a block/group/arrow ID, e.g. "a (Frontend)"
+function bdGetDisplayLabel(id) {
+    var item = bdFindItemById(id);
+    if (item && item.label && item.label !== id) return id + ' (' + item.label + ')';
+    return id;
+}
+
 function bdGenerateUniqueId(prefix) {
     var ids = bdGetAllBlockIds();
     var counter = 1;
@@ -516,7 +522,8 @@ function bdShowBlockDialog(block) {
         var shape = document.getElementById('bd-dlg-shape').value;
         var width = parseInt(document.getElementById('bd-dlg-width').value) || 1;
         if (isNew) {
-            postMessage({ type: 'bd_blockCreated', id: id, label: label || null, shape: shape, width: width, groupId: bdSelectedItem && bdSelectedItem.groupId ? bdSelectedItem.groupId : null });
+            var targetGroupId = block.__groupId || (bdSelectedItem && bdSelectedItem.groupId ? bdSelectedItem.groupId : null);
+            postMessage({ type: 'bd_blockCreated', id: id, label: label || null, shape: shape, width: width, groupId: targetGroupId });
         } else {
             postMessage({ type: 'bd_blockEdited', id: block.id, newId: id !== block.id ? id : undefined, label: label || null, shape: shape, width: width });
         }
@@ -663,8 +670,9 @@ function bdShowEdgeDialog(edgeIndex) {
     blockIds.forEach(function(id) {
         var fSel = id === edge.fromId ? 'selected' : '';
         var tSel = id === edge.toId ? 'selected' : '';
-        fromOpts += '<option value="' + _bdEsc(id) + '" ' + fSel + '>' + _bdEsc(id) + '</option>';
-        toOpts += '<option value="' + _bdEsc(id) + '" ' + tSel + '>' + _bdEsc(id) + '</option>';
+        var displayLabel = _bdEsc(bdGetDisplayLabel(id));
+        fromOpts += '<option value="' + _bdEsc(id) + '" ' + fSel + '>' + displayLabel + '</option>';
+        toOpts += '<option value="' + _bdEsc(id) + '" ' + tSel + '>' + displayLabel + '</option>';
     });
 
     // Mermaid block-beta only supports labeled edges with --> style
@@ -798,7 +806,7 @@ function bdShowEdgeDialogFrom(fromId) {
 
     var toOpts = '';
     blockIds.forEach(function(id) {
-        toOpts += '<option value="' + _bdEsc(id) + '">' + _bdEsc(id) + '</option>';
+        toOpts += '<option value="' + _bdEsc(id) + '">' + _bdEsc(bdGetDisplayLabel(id)) + '</option>';
     });
 
     body.innerHTML =
