@@ -727,7 +727,7 @@ function bdShowBlockDialog(block) {
         var shape = document.getElementById('bd-dlg-shape').value;
         var width = parseInt(document.getElementById('bd-dlg-width').value) || 1;
         if (isNew) {
-            var targetGroupId = block.__groupId || (bdSelectedItem && bdSelectedItem.groupId ? bdSelectedItem.groupId : null);
+            var targetGroupId = ('__groupId' in block) ? block.__groupId : (bdSelectedItem && bdSelectedItem.groupId ? bdSelectedItem.groupId : null);
             var insertIndex = block.__insertBefore != null ? block.__insertBefore : (block.__insertAfter != null ? block.__insertAfter + 1 : undefined);
             var msg = { type: 'bd_blockCreated', id: id, label: label || null, shape: shape, width: width, groupId: targetGroupId };
             if (insertIndex != null) msg.index = insertIndex;
@@ -799,7 +799,7 @@ function bdShowArrowDialog(arrow) {
         var direction = document.getElementById('bd-dlg-direction').value;
         var width = parseInt(document.getElementById('bd-dlg-width').value) || 1;
         if (isNew) {
-            var targetGroupId = arrow.__groupId || (bdSelectedItem && bdSelectedItem.groupId ? bdSelectedItem.groupId : null);
+            var targetGroupId = ('__groupId' in arrow) ? arrow.__groupId : (bdSelectedItem && bdSelectedItem.groupId ? bdSelectedItem.groupId : null);
             var insertIndex = arrow.__insertBefore != null ? arrow.__insertBefore : (arrow.__insertAfter != null ? arrow.__insertAfter + 1 : undefined);
             var msg = { type: 'bd_arrowCreated', id: id, label: label || null, direction: direction, width: width, groupId: targetGroupId };
             if (insertIndex != null) msg.index = insertIndex;
